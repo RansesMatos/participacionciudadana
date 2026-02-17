@@ -1,0 +1,236 @@
+@page "/admin/crear-actividad"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.AspNetCore.Hosting
+@using System.IO
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject UserManager<Usuario> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Crear Actividad - Participación Digital</PageTitle>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <h2 class="card-title fw-bold mb-4">Publicar Nueva Actividad</h2>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">@errorMessage</div>
+                    }
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="alert alert-success">@successMessage</div>
+                    }
+
+                    <EditForm Model="actividad" OnValidSubmit="HandleSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <InputText class="form-control" @bind-Value="actividad.Titulo" placeholder="Ej. Jornada de Limpieza" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Descripción</label>
+                            <InputTextArea class="form-control" @bind-Value="actividad.Descripcion" rows="4" placeholder="Detalles del evento..." />
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Sede / Lugar</label>
+                                <InputText class="form-control" @bind-Value="actividad.Lugar" placeholder="Ej. Parque Central" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Fecha y Hora</label>
+                                <InputDate Type="InputDateType.DateTimeLocal" class="form-control" @bind-Value="actividad.FechaRealizacion" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Imagen (Max 10MB)</label>
+                            <InputFile OnChange="HandleFileSelected" class="form-control" accept=".jpg,.jpeg,.png" />
+                            <small class="text-muted">Formatos permitidos: JPG, PNG. Tamaño máximo: 10MB.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Alcaldía</label>
+                            <select class="form-select" @bind="actividad.AlcaldiaId" disabled="@(!isMasterAdmin)">
+                                @if (isMasterAdmin)
+                                {
+                                    <option value="">Seleccione Alcaldía...</option>
+                                    @foreach (var a in alcaldias)
+                                    {
+                                        <option value="@a.Id">@a.Nombre</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="@currentUserAlcaldiaId" selected>@currentAlcaldiaName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="encuestas" class="btn btn-outline-secondary me-md-2">Cancelar</a>
+                            <button type="submit" class="btn btn-primary px-4">Publicar Actividad</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Actividad actividad = new() { FechaRealizacion = DateTime.Today.AddDays(1) };
+    private string? errorMessage;
+    private string? successMessage;
+    private IBrowserFile? selectedImage;
+    
+    // Context
+    private bool isMasterAdmin = false;
+    private int? currentUserAlcaldiaId;
+    private string currentAlcaldiaName = "";
+    private List<Alcaldia> alcaldias = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+
+        if (user != null)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            if (!roles.Contains("Administrador") && !roles.Contains("Moderador") && !roles.Contains("Asistente"))
+            {
+                Navigation.NavigateTo("/");
+                return;
+            }
+
+            currentUserAlcaldiaId = user.AlcaldiaId;
+            
+            using var context = DbFactory.CreateDbContext();
+            
+            if (currentUserAlcaldiaId == null)
+            {
+                isMasterAdmin = true;
+                alcaldias = await context.Alcaldias.OrderBy(a => a.Nombre).ToListAsync();
+            }
+            else
+            {
+                var alc = await context.Alcaldias.FindAsync(currentUserAlcaldiaId);
+                currentAlcaldiaName = alc?.Nombre ?? "Local";
+                actividad.AlcaldiaId = currentUserAlcaldiaId;
+            }
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            if (file.Size > 10 * 1024 * 1024) // 10MB
+            {
+                errorMessage = "La imagen excede el límite de 10MB.";
+                selectedImage = null;
+                return;
+            }
+            if (!file.ContentType.StartsWith("image/"))
+            {
+                errorMessage = "El archivo debe ser una imagen.";
+                selectedImage = null;
+                return;
+            }
+            errorMessage = null;
+            selectedImage = file;
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(actividad.Titulo) || string.IsNullOrWhiteSpace(actividad.Lugar))
+            {
+                errorMessage = "Título y Lugar son obligatorios.";
+                return;
+            }
+
+            if (!isMasterAdmin && actividad.AlcaldiaId != currentUserAlcaldiaId)
+            {
+                errorMessage = "No tiene permiso para publicar en otra alcaldía.";
+                return;
+            }
+
+            if (actividad.AlcaldiaId == null && !isMasterAdmin)
+            {
+                 errorMessage = "Debe asignar una alcaldía.";
+                 return;
+            }
+
+            // Save Image
+            if (selectedImage != null)
+            {
+                var fileName = $"{Guid.NewGuid()}{Path.GetExtension(selectedImage.Name)}";
+                var uploadPath = Path.Combine(Environment.WebRootPath, "images", "actividades");
+                
+                if (!Directory.Exists(uploadPath))
+                {
+                    Directory.CreateDirectory(uploadPath);
+                }
+
+                var fullPath = Path.Combine(uploadPath, fileName);
+                
+                await using FileStream fs = new(fullPath, FileMode.Create);
+                await selectedImage.OpenReadStream(10 * 1024 * 1024).CopyToAsync(fs);
+                
+                actividad.ImagenPath = $"images/actividades/{fileName}";
+            }
+
+            // Approval Logic
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = await UserManager.GetUserAsync(authState.User);
+            var roles = await UserManager.GetRolesAsync(user!);
+
+            if (roles.Contains("Administrador") || roles.Contains("Moderador"))
+            {
+                actividad.IsApproved = true;
+                successMessage = "Actividad publicada exitosamente.";
+            }
+            else
+            {
+                actividad.IsApproved = false;
+                successMessage = "Actividad enviada para aprobación.";
+            }
+
+            using var context = DbFactory.CreateDbContext();
+            context.Actividades.Add(actividad);
+            await context.SaveChangesAsync();
+
+            if (actividad.IsApproved)
+            {
+                Navigation.NavigateTo("actividades"); 
+            }
+            else
+            {
+                 // Stay on page and show message for assistant
+                 actividad = new() { FechaRealizacion = DateTime.Today.AddDays(1) }; // Reset form
+                 selectedImage = null;
+                 StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error al guardar: " + ex.Message;
+        }
+    }
+}

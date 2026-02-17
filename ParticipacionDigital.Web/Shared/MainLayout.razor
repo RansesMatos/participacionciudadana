@@ -1,0 +1,48 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>Participación Digital</PageTitle>
+
+@using Microsoft.AspNetCore.Identity
+@using ParticipacionDigital.Core.Entities
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserManager<Usuario> UserManager
+@inject NavigationManager Navigation
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <LoginDisplay />
+            <a href="ayuda">Ayuda</a>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+        <AccessibilityToolbar />
+    </main>
+</div>
+
+@code {
+    protected override async Task OnParametersSetAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userPrincipal = authState.User;
+
+        if (userPrincipal.Identity != null && userPrincipal.Identity.IsAuthenticated)
+        {
+            var user = await UserManager.GetUserAsync(userPrincipal);
+            if (user != null && user.MustChangePassword)
+            {
+                var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+                if (!uri.AbsolutePath.Contains("/account/change-password"))
+                {
+                    Navigation.NavigateTo("account/change-password");
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,211 @@
+@page
+@model ParticipacionDigital.Web.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Registro de Ciudadano";
+}
+
+<div class="row justify-content-center align-items-center" style="min-height: 85vh;">
+    <div class="col-md-6 col-lg-5">
+        <div class="text-center mb-4">
+            <h1 class="display-6 fw-bold text-gradient">Únete a la Participación</h1>
+            <p class="lead text-muted fs-6">Regístrate para votar y opinar en tu comunidad</p>
+        </div>
+
+        <div class="glass-card p-4 shadow-lg border-0">
+            <h2 class="text-center mb-4 fs-4 fw-bold text-primary">Crear Cuenta</h2>
+
+            <ul class="nav nav-pills nav-fill mb-4" id="pills-tab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="pills-demo-tab" data-bs-toggle="pill" data-bs-target="#pills-demo" type="button" role="tab" aria-controls="pills-demo" aria-selected="true">
+                        <i class="bi bi-magic"></i> Registro Rápido (Demo)
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pills-manual-tab" data-bs-toggle="pill" data-bs-target="#pills-manual" type="button" role="tab" aria-controls="pills-manual" aria-selected="false">
+                        <i class="bi bi-pencil-square"></i> Registro Manual
+                    </button>
+                </li>
+            </ul>
+
+            <form id="registerForm" asp-route-returnUrl="@Model.ReturnUrl" method="post">
+                <div asp-validation-summary="ModelOnly" class="text-danger small mb-3" role="alert"></div>
+
+                <div class="tab-content" id="pills-tabContent">
+                    <!-- Demo Tab -->
+                    <div class="tab-pane fade show active" id="pills-demo" role="tabpanel" aria-labelledby="pills-demo-tab" tabindex="0">
+                        <div class="alert alert-info small">
+                            <i class="bi bi-info-circle"></i> Ingrese su cédula para obtener sus datos automáticamente de la JCE (Simulado).
+                        </div>
+                        
+                        <div class="input-group mb-3">
+                            <input type="text" id="demoCedula" class="form-control" placeholder="001-0000000-0" aria-label="Cédula">
+                            <button class="btn btn-primary" type="button" id="btnConsultarJCE">
+                                <span id="spinnerJCE" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                Consultar
+                            </button>
+                        </div>
+                        <div id="jceResult" class="d-none animate__animated animate__fadeIn">
+                            <div class="alert alert-success d-flex align-items-center">
+                                <i class="bi bi-check-circle-fill me-2 lead"></i>
+                                <div>
+                                    <strong>¡Identidad Validada!</strong><br/>
+                                    <small>Datos recuperados exitosamente.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Shared Fields (Hidden/Auto-filled in Demo) -->
+                    <div id="sharedFields">
+                        <div class="form-floating mb-3">
+                            <input asp-for="Input.Nombre" class="form-control" autocomplete="name" aria-required="true" placeholder="Juan Perez" />
+                            <label asp-for="Input.Nombre">Nombre Completo</label>
+                            <span asp-validation-for="Input.Nombre" class="text-danger small"></span>
+                        </div>
+
+                        <div class="form-floating mb-3">
+                            <input asp-for="Input.Cedula" class="form-control" autocomplete="off" aria-required="true" placeholder="001-0000000-0" />
+                            <label asp-for="Input.Cedula">Cédula de Identidad</label>
+                            <span asp-validation-for="Input.Cedula" class="text-danger small"></span>
+                        </div>
+
+                         <div class="form-floating mb-3">
+                            <input asp-for="Input.Direccion" class="form-control" placeholder="Calle principal #123" />
+                            <label asp-for="Input.Direccion">Dirección</label>
+                            <span asp-validation-for="Input.Direccion" class="text-danger small"></span>
+                        </div>
+
+                        <div class="form-floating mb-3">
+                            <input asp-for="Input.PhoneNumber" class="form-control" placeholder="809-555-5555" />
+                            <label asp-for="Input.PhoneNumber">Teléfono</label>
+                            <span asp-validation-for="Input.PhoneNumber" class="text-danger small"></span>
+                        </div>
+
+                        <div class="form-floating mb-3">
+                             <select asp-for="Input.AlcaldiaId" class="form-select" aria-required="true">
+                                <option value="">-- Seleccione su Alcaldía --</option>
+                                @if (Model.Alcaldias != null)
+                                {
+                                    foreach (var alcaldia in Model.Alcaldias)
+                                    {
+                                        <option value="@alcaldia.Id">@alcaldia.Nombre</option>
+                                    }
+                                }
+                            </select>
+                            <label asp-for="Input.AlcaldiaId">Alcaldía / Municipio</label>
+                            <span asp-validation-for="Input.AlcaldiaId" class="text-danger small"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                <h6 class="text-muted mb-3">Credenciales de Acceso</h6>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                    <label asp-for="Input.Email">Correo Electrónico</label>
+                    <span asp-validation-for="Input.Email" class="text-danger small"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                    <label asp-for="Input.Password">Contraseña</label>
+                    <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                    <label asp-for="Input.ConfirmPassword">Confirmar Contraseña</label>
+                    <span asp-validation-for="Input.ConfirmPassword" class="text-danger small"></span>
+                </div>
+
+                <button id="registerSubmit" type="submit" class="w-100 btn btn-lg btn-success gradient-btn mb-3">Registrarse</button>
+                
+                <div class="text-center mt-3">
+                    <a asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl" class="text-decoration-none">¿Ya tienes una cuenta? <span class="fw-bold">Iniciar Sesión</span></a>
+                </div>
+            </form>
+        </div>
+        <div class="text-center mt-3 text-muted small">
+            &copy; 2026 Participación Digital
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnConsultar = document.getElementById('btnConsultarJCE');
+            const spinner = document.getElementById('spinnerJCE');
+            const jceResult = document.getElementById('jceResult');
+            const demoCedula = document.getElementById('demoCedula');
+
+            // Shared Inputs
+            const inputNombre = document.querySelector('input[name="Input.Nombre"]');
+            const inputCedula = document.querySelector('input[name="Input.Cedula"]');
+            const inputDireccion = document.querySelector('input[name="Input.Direccion"]');
+            const inputTelefono = document.querySelector('input[name="Input.PhoneNumber"]');
+            const selectAlcaldia = document.querySelector('select[name="Input.AlcaldiaId"]');
+
+            // Mock Data Database
+            const mockDB = {
+                '001-0000000-0': {
+                    nombre: 'Juan Pablo Duarte',
+                    direccion: 'Calle La Trinitaria #1, Zona Colonial',
+                    telefono: '809-555-0101',
+                    alcaldiaIndex: 1 // Assuming 1 is Distrito Nacional or similiar
+                }, 
+                '402-1234567-8': {
+                    nombre: 'Maria Trinidad Sanchez',
+                    direccion: 'Av. Heroinas #24, Nagua',
+                    telefono: '809-555-0202',
+                    alcaldiaIndex: 2 
+                }
+            };
+
+            btnConsultar.addEventListener('click', function() {
+                const cedula = demoCedula.value;
+                if(!cedula) {
+                    alert("Por favor ingrese una cédula.");
+                    return;
+                }
+
+                // UI Loading State
+                btnConsultar.disabled = true;
+                spinner.classList.remove('d-none');
+                jceResult.classList.add('d-none');
+                
+                // Simulation Delay (1.5s)
+                setTimeout(() => {
+                    const data = mockDB[cedula] || {
+                        nombre: 'Ciudadano Simulado ' + Math.floor(Math.random() * 100),
+                        direccion: 'Calle Simulación #404',
+                        telefono: '809-000-0000',
+                        alcaldiaIndex: 1
+                    };
+
+                    // Fill Fields
+                    inputCedula.value = cedula;
+                    inputNombre.value = data.nombre;
+                    inputDireccion.value = data.direccion;
+                    inputTelefono.value = data.telefono;
+                    
+                    // Try to set select if value exists, else index 1
+                    if(selectAlcaldia.options.length > data.alcaldiaIndex) {
+                         selectAlcaldia.selectedIndex = data.alcaldiaIndex;
+                    }
+
+                    // Show success
+                    spinner.classList.add('d-none');
+                    btnConsultar.disabled = false;
+                    jceResult.classList.remove('d-none');
+
+                }, 1500);
+            });
+            
+            // Tab switching logic to handle focus/visibility if needed
+            // Currently relies on Bootstrap's native tab.js
+        });
+    </script>
+}

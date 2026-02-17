@@ -1,0 +1,20 @@
+
+# Visual Studio
+.vs/
+.vscode/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+packages/
+
+# Project
+**/node_modules/
+**/dist/
+**/wwwroot/lib/
+!**/wwwroot/lib/microsoft/signalr/dist/browser/signalr.js
+!**/wwwroot/lib/jquery-validation/dist/jquery.validate.js
+!**/wwwroot/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.js
+
+# Logs
+*.log

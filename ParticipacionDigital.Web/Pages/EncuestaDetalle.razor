@@ -1,0 +1,380 @@
+@page "/encuestas/{Id:int}"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using System.Security.Claims
+@using System
+@using System.Threading.Tasks
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Detalle de Encuesta</PageTitle>
+
+@if (encuesta == null)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <h3>@encuesta.Titulo</h3>
+    <p>@encuesta.Descripcion</p>
+
+    @if (isAuthenticated)
+    {
+        @if (!encuesta.Activa)
+        {
+            <div class="alert alert-danger">
+                <i class="bi bi-x-circle"></i> Esta encuesta ha sido desactivada por un administrador.
+            </div>
+             @* Show results if user is admin/mod, otherwise hidden *@
+        }
+        else if (DateTime.UtcNow < encuesta.FechaInicio)
+        {
+            <div class="alert alert-info">
+                <i class="bi bi-clock"></i> Esta encuesta comenzará el @encuesta.FechaInicio.ToLocalTime().ToString("g").
+            </div>
+        }
+        else if (DateTime.UtcNow > encuesta.FechaFin)
+        {
+            <div class="alert alert-warning">
+                <i class="bi bi-clock-history"></i> Esta encuesta ha finalizado.
+            </div>
+             <!-- Show Results -->
+             <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Resultados Finales</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var totalVotos = votosPorOpcion.Values.Sum();
+                    }
+                    @foreach (var opcion in encuesta.Opciones)
+                    {
+                        var votos = votosPorOpcion.ContainsKey(opcion.Id) ? votosPorOpcion[opcion.Id] : 0;
+                        var porcentaje = totalVotos > 0 ? (double)votos / totalVotos * 100 : 0;
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>@opcion.Texto</span>
+                                <span class="text-muted small">@votos votos (@porcentaje.ToString("0.0")%)</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: @((int)porcentaje)%;" aria-valuenow="@((int)porcentaje)" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    }
+                    <div class="text-muted text-end small mt-2">
+                        Total de votos: @totalVotos
+                    </div>
+                </div>
+            </div>
+        }
+        else if (encuesta.AlcaldiaId != null && userAlcaldiaId != encuesta.AlcaldiaId)
+        {
+             <div class="alert alert-secondary">
+                <i class="bi bi-geo-alt-fill"></i> Esta encuesta está reservada para residentes de <strong>@encuesta.Alcaldia?.Nombre</strong>.
+            </div>
+        }
+        else if (yaVoto)
+        {
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Resultados Parciales</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var totalVotos = votosPorOpcion.Values.Sum();
+                    }
+                    @foreach (var opcion in encuesta.Opciones)
+                    {
+                        var votos = votosPorOpcion.ContainsKey(opcion.Id) ? votosPorOpcion[opcion.Id] : 0;
+                        var porcentaje = totalVotos > 0 ? (double)votos / totalVotos * 100 : 0;
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>@opcion.Texto</span>
+                                <span class="text-muted small">@votos votos (@porcentaje.ToString("0.0")%)</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: @((int)porcentaje)%;" aria-valuenow="@((int)porcentaje)" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    }
+                    <div class="text-muted text-end small mt-2">
+                        Total de votos: @totalVotos
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert alert-success d-flex align-items-center">
+                <span class="me-2">✅</span>
+                <div>¡Gracias por tu participación! Tu voto ha sido registrado.</div>
+            </div>
+        }
+        else if (!encuesta.Opciones.Any())
+        {
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> Esta encuesta no tiene opciones de respuesta configuradas.
+            </div>
+        }
+        else
+        {
+            <EditForm Model="votoModel" OnValidSubmit="HandleVoto">
+                <InputRadioGroup @bind-Value="votoModel.OpcionId">
+                    <div class="list-group mb-3">
+                        @foreach (var opcion in encuesta.Opciones)
+                        {
+                            <label class="list-group-item d-flex align-items-center cursor-pointer">
+                                <InputRadio Value="opcion.Id" class="me-3" style="width: 1.2em; height: 1.2em;" />
+                                <span class="fs-5">@opcion.Texto</span>
+                            </label>
+                        }
+                    </div>
+                </InputRadioGroup>
+                <button type="submit" class="btn btn-primary btn-lg w-100" disabled="@(votoModel.OpcionId == 0)">
+                    🗳️ Enviar Voto
+                </button>
+            </EditForm>
+        }
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            <p>Debes iniciar sesión para votar.</p>
+            <a href="Identity/Account/Login">Iniciar Sesión</a>
+        </div>
+    }
+
+    <hr class="my-5" />
+
+    <h4>Comentarios (@(encuesta.Comentarios?.Count ?? 0))</h4>
+
+    @if (encuesta.Comentarios != null && encuesta.Comentarios.Any())
+    {
+        <div class="list-group mb-4">
+            @foreach (var comentario in encuesta.Comentarios.OrderByDescending(c => c.FechaCreacion))
+            {
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1 text-primary">@comentario.Usuario?.Nombre</h6>
+                        <small class="text-muted">@comentario.FechaCreacion.ToLocalTime().ToString("g")</small>
+                    </div>
+                    <p class="mb-1">@comentario.Texto</p>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <p class="text-muted">No hay comentarios aún. ¡Sé el primero en opinar!</p>
+    }
+
+    @if (isAuthenticated)
+    {
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title">Deja tu comentario</h5>
+                <div class="mb-3">
+                    <textarea class="form-control" @bind="nuevoComentario.Texto" rows="3" placeholder="Comparte tu opinión con respeto..."></textarea>
+                </div>
+                <button class="btn btn-secondary" @onclick="HandleComentario" disabled="@string.IsNullOrWhiteSpace(nuevoComentario.Texto)">
+                    <span class="oi oi-comment-square"></span> Publicar Comentario
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            Inicia sesión para participar en la discusión.
+        </div>
+    }
+}
+
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Encuesta? encuesta;
+    private Dictionary<int, int> votosPorOpcion = new();
+    private HubConnection? hubConnection;
+    private bool isAuthenticated;
+    private bool yaVoto;
+    private int? userAlcaldiaId;
+    private VotoModel votoModel = new();
+
+    public class VotoModel { public int OpcionId { get; set; } }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isAuthenticated = user.Identity?.IsAuthenticated ?? false;
+
+        await LoadEncuesta();
+
+        if (isAuthenticated && encuesta != null)
+        {
+            var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdStr, out int userId))
+            {
+                using var context = DbFactory.CreateDbContext();
+                yaVoto = await context.Votos.AnyAsync(v => v.EncuestaId == Id && v.UsuarioId == userId);
+                
+                // Get User Alcaldia
+                var dbUser = await context.Users.FindAsync(userId);
+                userAlcaldiaId = dbUser?.AlcaldiaId;
+            }
+        }
+
+        await LoadResultados();
+
+        // SignalR Connection
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/votehub"))
+                .Build();
+
+            hubConnection.On<int>("ReceiveVoteUpdate", async (encuestaId) =>
+            {
+                if (encuestaId == Id)
+                {
+                    await LoadEncuesta();
+                    await LoadResultados();
+                    await InvokeAsync(StateHasChanged);
+                }
+            });
+
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
+        }
+    }
+
+    private async Task LoadEncuesta()
+    {
+        using var context = DbFactory.CreateDbContext();
+        encuesta = await context.Encuestas
+            .Include(e => e.Opciones)
+            .Include(e => e.Alcaldia)
+            .Include(e => e.Comentarios)
+                .ThenInclude(c => c.Usuario)
+            .FirstOrDefaultAsync(e => e.Id == Id);
+    }
+
+    private async Task LoadResultados()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var votos = await context.Votos
+            .Where(v => v.EncuestaId == Id)
+            .ToListAsync();
+
+        votosPorOpcion = votos
+            .GroupBy(v => v.OpcionId)
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    private async Task HandleVoto()
+    {
+        if (!isAuthenticated || encuesta == null || votoModel.OpcionId == 0) return;
+        
+        // Validation Checks
+         if (!encuesta.Activa || DateTime.UtcNow < encuesta.FechaInicio || DateTime.UtcNow > encuesta.FechaFin)
+        {
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdStr = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (int.TryParse(userIdStr, out int userId))
+        {
+             using var context = DbFactory.CreateDbContext();
+            
+            // Re-check Alcaldia on server side
+             var dbUser = await context.Users.FindAsync(userId);
+             if (encuesta.AlcaldiaId != null && dbUser?.AlcaldiaId != encuesta.AlcaldiaId)
+             {
+                 return; 
+             }
+             
+             // Re-check if already voted
+             if (await context.Votos.AnyAsync(v => v.EncuestaId == Id && v.UsuarioId == userId))
+             {
+                 yaVoto = true;
+                 return;
+             }
+
+            var voto = new Voto
+            {
+                EncuestaId = Id,
+                OpcionId = votoModel.OpcionId,
+                UsuarioId = userId,
+
+            };
+
+            context.Votos.Add(voto);
+            await context.SaveChangesAsync();
+            
+            yaVoto = true;
+            await LoadResultados();
+
+            if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+            {
+                await hubConnection.SendAsync("SendVoteUpdate", Id);
+            }
+        }
+    }
+
+    private Comentario nuevoComentario = new();
+
+    private async Task HandleComentario()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoComentario.Texto) || encuesta == null) return;
+        
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdStr = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdStr, out int userId)) userId = 1; // Fallback
+
+        using var context = DbFactory.CreateDbContext();
+
+        var comentario = new Comentario
+        {
+            Texto = nuevoComentario.Texto,
+            UsuarioId = userId,
+            EncuestaId = encuesta.Id,
+            FechaCreacion = DateTime.UtcNow
+        };
+
+        context.Entry(comentario).State = EntityState.Added;
+        // Also add to local collection for immediate UI update if needed, but reloading is safer
+        // encuesta.Comentarios.Add(comentario); 
+        
+        await context.SaveChangesAsync();
+        await LoadEncuesta(); // Reload to get the new comment with user info included
+
+        nuevoComentario = new();
+        
+        // Notify others about comment
+        if (hubConnection is not null && hubConnection.State == HubConnectionState.Connected)
+        {
+            await hubConnection.SendAsync("SendVoteUpdate", Id);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

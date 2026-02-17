@@ -1,0 +1,65 @@
+@page "/ayuda"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<PageTitle>Ayuda y Reglas de Uso</PageTitle>
+
+<div class="container my-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4 fw-bold text-primary">📚 Centro de Ayuda</h1>
+        <p class="lead text-muted">Guía para participar en la plataforma digital.</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Cómo Votar -->
+        <div class="col-md-6">
+            <div class="card glass-card h-100 border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="fs-1 me-3">🗳️</span>
+                        <h3 class="card-title fw-bold mb-0">Cómo Votar</h3>
+                    </div>
+                    <p class="card-text">Participe en las decisiones importantes siguiendo estos pasos:</p>
+                    <ol class="list-group list-group-numbered list-group-flush mb-3">
+                        <li class="list-group-item bg-transparent">Inicie sesión con su cuenta de ciudadano.</li>
+                        <li class="list-group-item bg-transparent">Diríjase a la sección <a href="encuestas" class="fw-bold">Encuestas</a>.</li>
+                        <li class="list-group-item bg-transparent">Seleccione una encuesta activa ("Participar").</li>
+                        <li class="list-group-item bg-transparent">Lea detenidamente la pregunta y las opciones.</li>
+                        <li class="list-group-item bg-transparent">Escoja su opción preferida y presione "Enviar Voto".</li>
+                    </ol>
+                    <div class="alert alert-info py-2">
+                        <small>⚠️ Solo puede votar una vez por encuesta. Su voto es anónimo.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Uso del Foro -->
+        <div class="col-md-6">
+            <div class="card glass-card h-100 border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="fs-1 me-3">💬</span>
+                        <h3 class="card-title fw-bold mb-0">Reglas del Foro</h3>
+                    </div>
+                    <p class="card-text">Mantengamos un espacio respetuoso y constructivo:</p>
+                    <ul class="list-unstyled">
+                        <li class="mb-2">✅ <strong class="text-success">Sea Respetuoso:</strong> No se toleran insultos ni lenguaje ofensivo.</li>
+                        <li class="mb-2">✅ <strong class="text-success">Sea Claro:</strong> Redacte títulos descriptivos para sus inquietudes.</li>
+                        <li class="mb-2">✅ <strong class="text-success">Evite Spam:</strong> No publique el mismo tema múltiples veces.</li>
+                        <li class="mb-2">⛔ <strong class="text-danger">Prohibido:</strong> Contenido ilegal, discriminatorio o violento.</li>
+                    </ul>
+                    <p class="text-muted small mt-3">
+                        Las publicaciones son moderadas automáticamente por nuestro sistema y revisadas por moderadores humanos. El incumplimiento puede llevar a la suspensión de su cuenta.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="text-center mt-5">
+        <a href="responsabilidades" class="btn btn-outline-secondary btn-lg">
+            📜 Ver Responsabilidades y Términos Legales
+        </a>
+    </div>
+</div>

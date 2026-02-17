@@ -1,0 +1,14 @@
+﻿  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ParticipacionDigital.Core -> C:\Users\farao\.gemini\antigravity\scratch\ParticipacionDigital\ParticipacionDigital.Core\bin\Debug\net8.0\ParticipacionDigital.Core.dll
+  ParticipacionDigital.Infrastructure -> C:\Users\farao\.gemini\antigravity\scratch\ParticipacionDigital\ParticipacionDigital.Infrastructure\bin\Debug\net8.0\ParticipacionDigital.Infrastructure.dll
+  ParticipacionDigital.Tests -> C:\Users\farao\.gemini\antigravity\scratch\ParticipacionDigital\ParticipacionDigital.Tests\bin\Debug\net8.0\ParticipacionDigital.Tests.dll
+  ParticipacionDigital.Web -> C:\Users\farao\.gemini\antigravity\scratch\ParticipacionDigital\ParticipacionDigital.Web\bin\Debug\net8.0\ParticipacionDigital.Web.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.63
+
+Workload updates are available. Run `dotnet workload list` for more information.

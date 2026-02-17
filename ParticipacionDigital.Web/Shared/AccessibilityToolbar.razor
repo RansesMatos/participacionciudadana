@@ -1,0 +1,75 @@
+@inject IJSRuntime JSRuntime
+
+<div class="accessibility-toolbar shadow-sm" role="toolbar" aria-label="Herramientas de Accesibilidad">
+    <div class="d-flex flex-column gap-2">
+        <button class="btn btn-sm btn-light border" @onclick="IncreaseFontSize" title="Aumentar Texto" aria-label="Aumentar tamaño de texto">
+            <span class="fs-5">A+</span>
+        </button>
+        <button class="btn btn-sm btn-light border" @onclick="DecreaseFontSize" title="Disminuir Texto" aria-label="Disminuir tamaño de texto">
+            <span class="fs-6">A-</span>
+        </button>
+        <button class="btn btn-sm btn-light border" @onclick="ToggleHighContrast" title="Alto Contraste" aria-label="Alternar alto contraste">
+            <span class="oi oi-contrast"></span>
+        </button>
+        <button class="btn btn-sm btn-light border" @onclick="ToggleLiteMode" title="Modo Ligero (Sin efectos)" aria-label="Alternar modo ligero">
+            ⚡
+        </button>
+        <button class="btn btn-sm btn-light border" @onclick="ReadPageContent" title="Leer Página" aria-label="Leer contenido de la página">
+            🔊
+        </button>
+        <button class="btn btn-sm btn-light border" @onclick="StopReading" title="Detener Lectura" aria-label="Detener lectura">
+            ⏹️
+        </button>
+    </div>
+</div>
+
+<style>
+    .accessibility-toolbar {
+        position: fixed;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1050;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        border-radius: 8px;
+        backdrop-filter: blur(5px);
+    }
+    
+    .high-contrast .accessibility-toolbar {
+        background: #000;
+        border: 2px solid #fff;
+    }
+</style>
+
+@code {
+    private async Task IncreaseFontSize()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.increaseFontSize");
+    }
+
+    private async Task DecreaseFontSize()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.decreaseFontSize");
+    }
+
+    private async Task ToggleHighContrast()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.toggleHighContrast");
+    }
+
+    private async Task ToggleLiteMode()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.toggleLiteMode");
+    }
+
+    private async Task ReadPageContent()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.readContent", "main");
+    }
+
+    private async Task StopReading()
+    {
+        await JSRuntime.InvokeVoidAsync("accessibility.stopReading");
+    }
+}

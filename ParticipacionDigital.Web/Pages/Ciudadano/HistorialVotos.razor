@@ -1,0 +1,111 @@
+@page "/mis-votos"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Core.Enums
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AppDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@attribute [Authorize]
+
+<PageTitle>Mis Votos</PageTitle>
+
+<div class="row mb-4">
+    <div class="col">
+        <h2 class="fw-bold text-primary">📜 Historial de Votos</h2>
+        <p class="text-muted">Revise las encuestas en las que ha participado.</p>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center p-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (!votos.Any())
+{
+    <div class="alert alert-info glass-card border-0">
+        <h4 class="alert-heading">No has votado aún.</h4>
+        <p>Participa en las <a href="/" class="fw-bold">encuestas activas</a> para ver tu historial aquí.</p>
+    </div>
+}
+else
+{
+    <div class="card glass-card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="bg-light">
+                        <tr>
+                            <th scope="col" class="ps-4">Encuesta</th>
+                            <th scope="col">Opción Elegida</th>
+                            <th scope="col">Fecha</th>
+                            <th scope="col" class="text-end pe-4">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var voto in votos)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="fw-bold text-dark">@voto.Encuesta.Titulo</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill px-3">
+                                        @voto.Opcion.Texto
+                                    </span>
+                                </td>
+                                <td class="text-muted">@voto.FechaCreacion.ToString("f")</td>
+                                <td class="text-end pe-4">
+                                    @if(voto.Encuesta.Activa)
+                                    {
+                                        <span class="badge bg-success">Activa</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Finalizada</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Voto> votos = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var idClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+                if (idClaim != null && int.TryParse(idClaim.Value, out int uid))
+                {
+                    votos = await DbContext.Votos
+                        .Include(v => v.Encuesta)
+                        .Include(v => v.Opcion)
+                        .Where(v => v.UsuarioId == uid)
+                        .OrderByDescending(v => v.FechaCreacion)
+                        .ToListAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

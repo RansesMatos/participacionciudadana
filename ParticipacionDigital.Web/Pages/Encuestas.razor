@@ -1,0 +1,102 @@
+@page "/encuestas"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@inject AppDbContext DbContext
+
+<PageTitle>Encuestas Disponibles</PageTitle>
+
+<h1>Encuestas Activas</h1>
+<p class="lead">Participa en las decisiones más importantes.</p>
+
+<div class="alert alert-info d-flex align-items-center" role="alert">
+  <i class="oi oi-info me-2"></i>
+  <div>
+    Selecciona una encuesta para ver los detalles y votar.
+  </div>
+</div>
+
+@if (encuestas == null)
+{
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    </div>
+}
+else if (!encuestas.Any())
+{
+    <div class="card text-center p-5 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title text-muted">No hay encuestas activas</h5>
+            <p class="card-text">Vuelve más tarde para participar en nuevas consultas.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-2 g-4">
+        @foreach (var encuesta in encuestas)
+        {
+            <div class="col">
+                <div class="card h-100 shadow-sm hover-effect border-0">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-white text-primary me-2">Activa</span>
+                            <span class="badge @(encuesta.AlcaldiaId == null ? "bg-warning text-dark" : "bg-info text-white")">
+                                @(encuesta.Alcaldia?.Nombre ?? "Global")
+                            </span>
+                        </div>
+                        <small>@encuesta.FechaInicio.ToShortDateString()</small>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title fw-bold">@encuesta.Titulo</h5>
+                        <p class="card-text text-secondary">@encuesta.Descripcion</p>
+                    </div>
+                    <div class="card-footer bg-white border-top-0 pb-3">
+                        <a href="encuestas/@encuesta.Id" class="btn btn-outline-primary w-100 rounded-pill">Participar</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@using Microsoft.AspNetCore.Identity
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserManager<Usuario> UserManager
+
+<style>
+    .hover-effect:hover {
+        transform: translateY(-3px);
+        transition: transform 0.2s ease-in-out;
+    }
+</style>
+
+@code {
+    private List<Encuesta>? encuestas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        int? userAlcaldiaId = null;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+             var appUser = await UserManager.GetUserAsync(user);
+             if (appUser != null)
+             {
+                 userAlcaldiaId = appUser.AlcaldiaId;
+             }
+        }
+
+        // Fetch active polls: Global OR matching User's Alcaldia
+        encuestas = await DbContext.Encuestas
+            .Include(e => e.Alcaldia)
+            .Where(e => e.Activa && e.FechaFin > DateTime.UtcNow)
+            .Where(e => e.AlcaldiaId == null || (userAlcaldiaId != null && e.AlcaldiaId == userAlcaldiaId))
+            .OrderByDescending(e => e.FechaInicio)
+            .ToListAsync();
+    }
+}

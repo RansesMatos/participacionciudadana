@@ -1,0 +1,98 @@
+﻿@page "/"
+
+<PageTitle>Inicio | Participación Digital</PageTitle>
+
+<div class="hero-section text-center p-5 mb-4 bg-light rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold text-primary">Tu voz importa</h1>
+    <p class="lead">Bienvenido a la Plataforma de Participación Digital de República Dominicana.</p>
+    <hr class="my-4">
+    <p>Únete a la conversación, vota en encuestas y ayuda a construir un mejor futuro para todos.</p>
+    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+        <a href="encuestas" class="btn btn-primary btn-lg px-4 gap-3">Ver Encuestas Activas</a>
+        <AuthorizeView>
+            <NotAuthorized>
+                <a href="/Account/Register" class="btn btn-outline-secondary btn-lg px-4">Registrarse</a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</div>
+
+@using Microsoft.Extensions.Caching.Memory
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Linq
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IMemoryCache _cache
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    @if (encuestasDestacadas == null)
+    {
+        <div class="col-12 text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        @foreach (var encuesta in encuestasDestacadas)
+        {
+            <div class="col">
+                <div class="card h-100 border-0 shadow-sm hover-effect">
+                    <div class="card-body text-center">
+                        <i class="oi oi-bar-chart text-primary display-4 mb-3"></i>
+                        <h5 class="card-title">@encuesta.Titulo</h5>
+                        <p class="card-text text-truncate">@encuesta.Descripcion</p>
+                        <a href="encuestas/@encuesta.Id" class="btn btn-outline-primary mt-2">Participar</a>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-muted small">
+                        <small>Cierra: @encuesta.FechaFin.ToShortDateString()</small>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<Encuesta>? encuestasDestacadas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Cache Key
+        string cacheKey = "EncuestasDestacadas";
+
+        // Intentar obtener del caché
+        if (!_cache.TryGetValue(cacheKey, out List<Encuesta>? encuestas))
+        {
+            // Si no está en caché, consultar BD con nuevo contexto
+            using var context = DbFactory.CreateDbContext();
+            
+            encuestas = await context.Encuestas
+                .Where(e => e.FechaFin > DateTime.UtcNow)
+                .OrderByDescending(e => e.FechaCreacion)
+                .Take(3)
+                .ToListAsync();
+
+            // Configurar opciones de caché
+            var cacheOptions = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(TimeSpan.FromMinutes(1)) // Expira en 1 minuto
+                .SetPriority(CacheItemPriority.High);
+
+            // Guardar en caché
+            _cache.Set(cacheKey, encuestas, cacheOptions);
+        }
+
+        encuestasDestacadas = encuestas;
+    }
+}
+
+<style>
+    .hover-effect {
+        transition: transform 0.2s;
+    }
+    .hover-effect:hover {
+        transform: translateY(-5px);
+    }
+</style>

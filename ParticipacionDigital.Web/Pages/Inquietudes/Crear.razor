@@ -1,0 +1,115 @@
+@page "/inquietudes/crear"
+@using System.Security.Claims
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@using ParticipacionDigital.Core.Services
+@inject AppDbContext DbContext
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ContentModerationService ModerationService
+@attribute [Authorize]
+
+<PageTitle>Nueva Inquietud</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card glass-card shadow-lg border-0">
+            <div class="card-body p-5">
+                <h2 class="card-title text-center mb-4 fw-bold text-primary">📝 Publicar Inquietud</h2>
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @errorMessage
+                    </div>
+                }
+
+                <EditForm Model="@inquietudModel" OnValidSubmit="HandleValidSubmit">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="form-floating mb-3">
+                        <InputText id="titulo" class="form-control" @bind-Value="inquietudModel.Titulo" placeholder="Título" />
+                        <label for="titulo">Título del tema</label>
+                        <ValidationMessage For="@(() => inquietudModel.Titulo)" />
+                    </div>
+
+                    <div class="form-floating mb-3">
+                        <InputTextArea id="descripcion" class="form-control" @bind-Value="inquietudModel.Descripcion" placeholder="Descripción" style="height: 150px" />
+                        <label for="descripcion">Detalle su inquietud...</label>
+                        <ValidationMessage For="@(() => inquietudModel.Descripcion)" />
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary gradient-btn btn-lg">Publicar</button>
+                        <a href="/inquietudes" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Inquietud inquietudModel = new Inquietud();
+    private string? errorMessage;
+    private string? userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            var userIdClaim = user.FindFirst(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim != null)
+            {
+                userId = userIdClaim.Value;
+            }
+        }
+        else
+        {
+             Navigation.NavigateTo("Identity/Account/Login?returnUrl=/inquietudes/crear", true);
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (string.IsNullOrEmpty(userId))
+        {
+            errorMessage = "Usuario no identificado.";
+            return;
+        }
+
+        // Moderation Check
+        List<string> badWordsTitle;
+        List<string> badWordsDesc;
+        bool titleBad = ModerationService.ContainsBadWords(inquietudModel.Titulo, out badWordsTitle);
+        bool descBad = ModerationService.ContainsBadWords(inquietudModel.Descripcion, out badWordsDesc);
+
+        if (titleBad || descBad)
+        {
+            var allBadWords = badWordsTitle.Concat(badWordsDesc).Distinct();
+            errorMessage = $"Su publicación contiene palabras no permitidas: {string.Join(", ", allBadWords)}. Por favor, modifique el contenido para mantener un ambiente de respeto.";
+            return;
+        }
+
+        try
+        {
+            inquietudModel.AutorId = int.Parse(userId);
+            inquietudModel.FechaCreacion = DateTime.UtcNow;
+            
+            DbContext.Inquietudes.Add(inquietudModel);
+            await DbContext.SaveChangesAsync();
+
+            Navigation.NavigateTo("/inquietudes");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Ocurrió un error al guardar la inquietud. Inténtelo nuevamente.";
+            Console.WriteLine(ex);
+        }
+    }
+}

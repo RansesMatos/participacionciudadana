@@ -1,0 +1,45 @@
+@page
+@model ParticipacionDigital.Web.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Iniciar Sesión";
+}
+
+<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="col-md-5 col-lg-4">
+        <div class="text-center mb-4">
+            <h1 class="display-5 fw-bold text-primary" style="text-shadow: 0 2px 4px rgba(0,0,0,0.1);">Participación Digital</h1>
+            <p class="lead text-muted">Bienvenido al sistema de votación</p>
+        </div>
+        <div class="card shadow-lg border-0">
+            <div class="card-body p-5">
+                <h3 class="card-title text-center mb-4 fw-bold text-secondary">Iniciar Sesión</h3>
+                <form method="post">
+                    <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Input.Email" class="form-control" placeholder="nombre@ejemplo.com" />
+                        <label asp-for="Input.Email">Correo Electrónico</label>
+                        <span asp-validation-for="Input.Email" class="text-danger small"></span>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input asp-for="Input.Password" class="form-control" placeholder="Contraseña" type="password" />
+                        <label asp-for="Input.Password">Contraseña</label>
+                        <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-4 form-check">
+                        <input asp-for="Input.RememberMe" class="form-check-input" />
+                        <label asp-for="Input.RememberMe" class="form-check-label">Recordarme</label>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg gradient-btn">Entrar</button>
+                    </div>
+                </form>
+                <div class="mt-4 text-center">
+                    <a href="/Account/Register" class="text-decoration-none">¿No tienes cuenta? <span class="fw-bold">Regístrate</span></a>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-3 text-muted small">
+            &copy; 2026 Participación Digital
+        </div>
+    </div>
+</div>

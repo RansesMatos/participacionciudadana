@@ -1,0 +1,201 @@
+@page "/actividades"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using ParticipacionDigital.Web.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Calendario de Actividades - Participación Digital</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Calendario de Actividades</h2>
+        
+        <div class="d-flex gap-2">
+            <select class="form-select" @onchange="FilterByAlcaldia">
+                <option value="">Todas las Alcaldías</option>
+                @foreach (var alcaldia in alcaldias)
+                {
+                    <option value="@alcaldia.Id">@alcaldia.Nombre</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-4">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == 0 ? "active" : "")" @onclick="() => SetTab(0)">
+                <i class="bi bi-calendar-event"></i> Próximas
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == 1 ? "active" : "")" @onclick="() => SetTab(1)">
+                <i class="bi bi-clock-history"></i> Historial
+            </button>
+        </li>
+    </ul>
+
+    @if (actividades == null)
+    {
+         <div class="d-flex justify-content-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (!actividades.Any())
+    {
+         <div class="alert alert-info text-center">
+            <i class="bi bi-calendar-x"></i> No hay actividades en esta vista.
+        </div>
+    }
+    else
+    {
+        @if (activeTab == 0)
+        {
+            // Grid View for Upcoming
+            <div class="row row-cols-1 row-cols-md-3 g-4">
+                @foreach (var actividad in actividades)
+                {
+                    <div class="col">
+                        <div class="card h-100 shadow-sm border-0">
+                             @if (!string.IsNullOrEmpty(actividad.ImagenPath))
+                            {
+                                <img src="@actividad.ImagenPath" class="card-img-top" alt="@actividad.Titulo" style="height: 200px; object-fit: cover;">
+                            }
+                            else
+                            {
+                                 <div class="card-img-top bg-light d-flex justify-content-center align-items-center" style="height: 200px;">
+                                    <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                                </div>
+                            }
+                            
+                            <div class="card-body">
+                                <h5 class="card-title fw-bold">@actividad.Titulo</h5>
+                                
+                                <div class="mb-2 text-muted small">
+                                    <i class="bi bi-geo-alt-fill text-danger"></i> @actividad.Lugar <br/>
+                                    <i class="bi bi-calendar-event"></i> @actividad.FechaRealizacion.ToString("dd/MM/yyyy hh:mm tt")
+                                </div>
+
+                                <p class="card-text text-truncate-3">
+                                    @actividad.Descripcion
+                                </p>
+                            </div>
+                            <div class="card-footer bg-transparent border-0 pb-3">
+                                <small class="text-muted">
+                                    Organiza: 
+                                    <span class="badge bg-secondary">
+                                        @(actividad.Alcaldia?.Nombre ?? "Global")
+                                    </span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            // List View for History
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Título</th>
+                            <th>Lugar</th>
+                            <th>Alcaldía</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var actividad in actividades)
+                        {
+                            <tr>
+                                <td>@actividad.FechaRealizacion.ToString("dd/MM/yyyy")</td>
+                                <td class="fw-bold">@actividad.Titulo</td>
+                                <td>@actividad.Lugar</td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        @(actividad.Alcaldia?.Nombre ?? "Global")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .text-truncate-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+</style>
+
+@code {
+    private List<Actividad> actividades;
+    private List<Alcaldia> alcaldias = new();
+    private int? selectedAlcaldiaId;
+    private int activeTab = 0; // 0: Upcoming, 1: History
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        alcaldias = await context.Alcaldias.OrderBy(a => a.Nombre).ToListAsync();
+        await LoadActividades();
+    }
+
+    private async Task LoadActividades()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var query = context.Actividades
+            .Include(a => a.Alcaldia)
+            .Where(a => a.IsApproved)
+            .AsQueryable();
+
+        if (activeTab == 0)
+        {
+            // Upcoming
+            query = query.Where(a => a.FechaRealizacion >= DateTime.Today)
+                         .OrderBy(a => a.FechaRealizacion);
+        }
+        else
+        {
+            // History
+            query = query.Where(a => a.FechaRealizacion < DateTime.Today)
+                         .OrderByDescending(a => a.FechaRealizacion);
+        }
+
+        if (selectedAlcaldiaId.HasValue)
+        {
+            query = query.Where(a => a.AlcaldiaId == selectedAlcaldiaId);
+        }
+
+        actividades = await query.ToListAsync();
+    }
+
+    private async Task FilterByAlcaldia(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id))
+        {
+            selectedAlcaldiaId = id;
+        }
+        else
+        {
+            selectedAlcaldiaId = null;
+        }
+        await LoadActividades();
+    }
+
+    private async Task SetTab(int tabIndex)
+    {
+        activeTab = tabIndex;
+        await LoadActividades();
+    }
+}

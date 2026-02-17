@@ -1,0 +1,16 @@
+<AuthorizeView>
+    <Authorized>
+        <div class="d-flex align-items-center gap-3">
+            <span>Hola, @context.User.Identity?.Name!</span>
+            <form method="post" action="Account/Logout">
+                <button type="submit" class="nav-link btn btn-link">Cerrar Sesión</button>
+            </form>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="d-flex gap-3">
+            <a href="/Account/Register">Registrarse</a>
+            <a href="/Account/Login">Iniciar Sesión</a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>

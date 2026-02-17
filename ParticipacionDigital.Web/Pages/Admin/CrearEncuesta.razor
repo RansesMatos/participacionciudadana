@@ -1,0 +1,241 @@
+@page "/admin/crear-encuesta"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Core.Enums
+@using ParticipacionDigital.Infrastructure.Data
+@using System.Security.Claims
+@using System.Threading.Tasks
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Crear Nueva Encuesta</PageTitle>
+
+<div class="container">
+    <h1>Crear Nueva Encuesta</h1>
+    <hr />
+
+    @if (isAuthenticated)
+    {
+        <EditForm Model="nuevaEncuesta" OnValidSubmit="SubmitSurvey">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label class="form-label">Título</label>
+                <InputText class="form-control" @bind-Value="nuevaEncuesta.Titulo" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Descripción</label>
+                <InputTextArea class="form-control" @bind-Value="nuevaEncuesta.Descripcion" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Tipo de Respuesta</label>
+                <select class="form-select mb-3" @onchange="OnTemplateChanged">
+                    <option value="Custom">Personalizada (Escribir opciones)</option>
+                    <option value="Agreement">Escala de Acuerdo (5 niveles)</option>
+                    <option value="Approval">Aprobación (Aprobado/Rechazado)</option>
+                </select>
+
+                <label class="form-label">Opciones de Respuesta</label>
+                @for (int i = 0; i < opciones.Count; i++)
+                {
+                    var index = i;
+                    <div class="input-group mb-2">
+                        <span class="input-group-text">@(i + 1)</span>
+                        <InputText class="form-control" @bind-Value="opciones[index].Texto" placeholder="@($"Opción {i + 1}")" readonly="@(selectedTemplate != "Custom")" />
+                        @if (selectedTemplate == "Custom" && opciones.Count > 2)
+                        {
+                            <button type="button" class="btn btn-outline-danger" @onclick="() => RemoveOption(index)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        }
+                    </div>
+                }
+                
+                @if (selectedTemplate == "Custom")
+                {
+                    <button type="button" class="btn btn-outline-primary btn-sm" @onclick="AddOption" disabled="@(opciones.Count >= 6)">
+                        <i class="bi bi-plus-circle"></i> Agregar Opción
+                    </button>
+                    @if (opciones.Count < 2)
+                    {
+                        <div class="text-danger small mt-1">Debe agregar al menos 2 opciones.</div>
+                    }
+                    @if (opciones.Count >= 6)
+                    {
+                        <div class="text-muted small mt-1">Máximo 6 opciones permitidas.</div>
+                    }
+                }
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Fecha Inicio</label>
+                    <InputDate class="form-control" @bind-Value="nuevaEncuesta.FechaInicio" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Fecha Fin</label>
+                    <InputDate class="form-control" @bind-Value="nuevaEncuesta.FechaFin" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Alcaldía Objetivo</label>
+                <InputSelect class="form-select" @bind-Value="nuevaEncuesta.AlcaldiaId">
+                    <option value="">Global (Todas las Alcaldías)</option>
+                    @foreach (var alcaldia in alcaldias)
+                    {
+                        <option value="@alcaldia.Id">@alcaldia.Nombre</option>
+                    }
+                </InputSelect>
+                <div class="form-text">Si selecciona "Global", la encuesta será visible para todos los ciudadanos.</div>
+            </div>
+
+            @if (canPublishDirectly)
+            {
+                <div class="mb-3 form-check">
+                    <InputCheckbox class="form-check-input" @bind-Value="nuevaEncuesta.Activa" />
+                    <label class="form-check-label">Encuesta Activa (Publicar inmediatamente)</label>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="oi oi-info"></i> Su encuesta se creará como <strong>Pendiente de Aprobación</strong>. Un administrador deberá revisarla antes de que sea pública.
+                </div>
+            }
+
+            <button type="submit" class="btn btn-success" disabled="@(opciones.Count < 2)">
+                @(canPublishDirectly ? "Publicar Encuesta" : "Enviar a Revisión")
+            </button>
+        </EditForm>
+    }
+    else
+    {
+         <div class="alert alert-warning">
+            <p>Acceso restringido a administradores.</p>
+        </div>
+    }
+</div>
+
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<Usuario> UserManager
+@using System.Collections.Generic
+
+@code {
+    private Encuesta nuevaEncuesta = new() { FechaInicio = DateTime.Today, FechaFin = DateTime.Today.AddDays(7), Activa = true };
+    private List<Opcion> opciones = new() { new Opcion(), new Opcion() }; // Start with 2 empty options
+    private bool canPublishDirectly = false;
+    private bool isAuthenticated = false;
+    private List<Alcaldia> alcaldias = new();
+    private string selectedTemplate = "Custom";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        isAuthenticated = user.Identity?.IsAuthenticated ?? false;
+
+        if (isAuthenticated)
+        {
+            using var context = DbFactory.CreateDbContext();
+            alcaldias = await context.Alcaldias.OrderBy(a => a.Nombre).ToListAsync();
+            
+            // Allow Admins and Moderators to publish directly (Active = true)
+            // Assistants can create, but Active will be forced to false
+            canPublishDirectly = user.IsInRole(RolUsuario.Administrador.ToString()) || 
+                                 user.IsInRole(RolUsuario.Moderador.ToString());
+
+            if (!canPublishDirectly) 
+            {
+                nuevaEncuesta.Activa = false; // Force inactive for assistants
+            }
+        }
+    }
+
+    private void AddOption()
+    {
+        if (opciones.Count < 6)
+        {
+            opciones.Add(new Opcion());
+        }
+    }
+
+    private void RemoveOption(int index)
+    {
+        if (opciones.Count > 2)
+        {
+            opciones.RemoveAt(index);
+        }
+    }
+
+    private void OnTemplateChanged(ChangeEventArgs e)
+    {
+        var template = e.Value?.ToString();
+        
+        switch (template)
+        {
+            case "Agreement":
+                opciones = new List<Opcion>
+                {
+                    new Opcion { Texto = "Muy de acuerdo" },
+                    new Opcion { Texto = "De acuerdo" },
+                    new Opcion { Texto = "Neutral" },
+                    new Opcion { Texto = "Desacuerdo" },
+                    new Opcion { Texto = "Total desacuerdo" }
+                };
+                break;
+            case "Approval":
+                opciones = new List<Opcion>
+                {
+                    new Opcion { Texto = "Aprobado" },
+                    new Opcion { Texto = "Rechazado" }
+                };
+                break;
+            default: // Custom
+                opciones = new List<Opcion> { new Opcion(), new Opcion() };
+                break;
+        }
+    }
+
+    private async Task SubmitSurvey()
+    {
+        // Validate options
+        if (opciones.Count < 2 || opciones.Any(o => string.IsNullOrWhiteSpace(o.Texto)))
+        {
+            // Show error (or just rely on disabled button)
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+
+        if (user != null)
+        {
+            nuevaEncuesta.CreadorId = user.Id;
+            nuevaEncuesta.Opciones = opciones; // Assign options
+            
+            // Enforce security check again on submit
+            if (!canPublishDirectly)
+            {
+                nuevaEncuesta.Activa = false;
+            }
+
+            using var context = DbFactory.CreateDbContext();
+            context.Encuestas.Add(nuevaEncuesta);
+            await context.SaveChangesAsync();
+            
+            if (canPublishDirectly)
+            {
+                Navigation.NavigateTo("/encuestas");
+            }
+            else
+            {
+                 Navigation.NavigateTo("/encuestas"); 
+            }
+        }
+    }
+}

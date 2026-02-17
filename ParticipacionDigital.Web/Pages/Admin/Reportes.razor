@@ -1,0 +1,161 @@
+@page "/admin/reportes"
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using System.Text
+@inject AppDbContext DbContext
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Panel de Reportes</PageTitle>
+
+<div class="container">
+    <h2 class="mb-4">📊 Panel de Reportes y Estadísticas</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Encuestas Registradas</h5>
+        </div>
+        <div class="card-body">
+            @if (encuestas == null)
+            {
+                <div class="d-flex justify-content-center p-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            }
+            else if (!encuestas.Any())
+            {
+                <div class="alert alert-info">No hay encuestas registradas.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Título</th>
+                                <th class="text-center">Votos</th>
+                                <th class="text-center">Comentarios</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-end">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var encuesta in encuestas)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@encuesta.Titulo</strong>
+                                        <div class="text-muted small text-truncate" style="max-width: 300px;">@encuesta.Descripcion</div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary rounded-pill">@(encuesta.Votos?.Count ?? 0)</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary rounded-pill">@(encuesta.Comentarios?.Count ?? 0)</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (encuesta.FechaFin > DateTime.UtcNow)
+                                        {
+                                            <span class="badge bg-success">Activa</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">Cerrada</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="/encuestas/@encuesta.Id" class="btn btn-sm btn-outline-primary me-1" target="_blank">
+                                            👁️ Ver
+                                        </a>
+                                        <button class="btn btn-sm btn-success" @onclick="() => ExportarCSV(encuesta)">
+                                            📥 Exportar CSV
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+    window.downloadFileFromStream = async (fileName, contentStreamReference) => {
+        const arrayBuffer = await contentStreamReference.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const anchorElement = document.createElement('a');
+        anchorElement.href = url;
+        anchorElement.download = fileName ?? '';
+        anchorElement.click();
+        anchorElement.remove();
+        URL.revokeObjectURL(url);
+    }
+</script>
+
+@code {
+    private List<Encuesta>? encuestas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        encuestas = await DbContext.Encuestas
+            .Include(e => e.Votos)
+            .Include(e => e.Comentarios)
+            .Include(e => e.Opciones)
+            .OrderByDescending(e => e.FechaCreacion)
+            .ToListAsync();
+    }
+
+    private async Task ExportarCSV(Encuesta encuesta)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("Reporte de Encuesta");
+        builder.AppendLine($"Titulo,{encuesta.Titulo}");
+        builder.AppendLine($"Descripcion,{encuesta.Descripcion}");
+        builder.AppendLine($"Fecha Inicio,{encuesta.FechaInicio}");
+        builder.AppendLine($"Fecha Fin,{encuesta.FechaFin}");
+        builder.AppendLine();
+        
+        builder.AppendLine("Resumen de Votos");
+        builder.AppendLine("Opcion,Cantidad,Porcentaje");
+        
+        var totalVotos = encuesta.Votos?.Count ?? 0;
+        var votosPorOpcion = encuesta.Votos?
+            .GroupBy(v => v.OpcionId)
+            .ToDictionary(g => g.Key, g => g.Count()) ?? new Dictionary<int, int>();
+
+        foreach (var opcion in encuesta.Opciones)
+        {
+            var cantidad = votosPorOpcion.ContainsKey(opcion.Id) ? votosPorOpcion[opcion.Id] : 0;
+            var porcentaje = totalVotos > 0 ? (double)cantidad / totalVotos * 100 : 0;
+            builder.AppendLine($"{opcion.Texto},{cantidad},{porcentaje:F2}%");
+        }
+        
+        builder.AppendLine();
+        builder.AppendLine("Comentarios");
+        builder.AppendLine("Fecha,UsuarioID,Comentario");
+        
+        if (encuesta.Comentarios != null)
+        {
+            foreach (var comentario in encuesta.Comentarios)
+            {
+                // Sanitize content for CSV
+                var texto = comentario.Texto.Replace(",", " ").Replace("\n", " ");
+                builder.AppendLine($"{comentario.FechaCreacion},{comentario.UsuarioId},{texto}");
+            }
+        }
+
+        var csvContent = builder.ToString();
+        var bytes = Encoding.UTF8.GetBytes(csvContent);
+        var stream = new MemoryStream(bytes);
+        using var streamRef = new DotNetStreamReference(stream);
+
+        // Simple JS download trigger
+        await JSRuntime.InvokeVoidAsync("downloadFileFromStream", $"Reporte_Encuesta_{encuesta.Id}.csv", streamRef);
+    }
+}

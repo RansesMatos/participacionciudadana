@@ -1,0 +1,166 @@
+@page "/admin/dashboard"
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Web.Services
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject DashboardService DashboardService
+@inject UserManager<Usuario> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Dashboard - Participación Digital</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold">Dashboard de Analítica</h2>
+        
+        <div class="d-flex gap-2">
+            @if (isMasterAdmin)
+            {
+                <select class="form-select" @onchange="OnAlcaldiaChanged">
+                    <option value="">Todas las Alcaldías</option>
+                    @foreach (var alcaldia in alcaldias)
+                    {
+                        <option value="@alcaldia.Id">@alcaldia.Nombre</option>
+                    }
+                </select>
+            }
+            
+            <input type="date" class="form-control" @bind="startDate" />
+            <input type="date" class="form-control" @bind="endDate" />
+            <button class="btn btn-primary" @onclick="LoadCharts">Filtrar</button>
+        </div>
+    </div>
+
+    @* KPI Cards *@
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white shadow-sm h-100 border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-box-seam"></i> Votos Totales</h5>
+                    <p class="display-4 fw-bold mb-0">@totalVotes</p>
+                    <small class="opacity-75">En el periodo seleccionado</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+             <div class="card text-white shadow-sm h-100 border-0" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important;">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-list-check"></i> Encuestas Activas</h5>
+                    <p class="display-4 fw-bold mb-0">@activeSurveys</p>
+                    <small class="opacity-75">Actualmente abiertas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+             <div class="card text-white shadow-sm h-100 border-0" style="background: linear-gradient(135deg, #FF512F 0%, #DD2476 100%) !important;">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-chat-dots"></i> Inquietudes Abiertas</h5>
+                    <p class="display-4 fw-bold mb-0">@openInquietudes</p>
+                    <small class="opacity-75">Requieren atención</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Charts *@
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white fw-bold">Top Encuestas (Votos)</div>
+                <div class="card-body">
+                     <canvas id="votesChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+             <div class="card shadow-sm">
+                <div class="card-header bg-white fw-bold">Actividad Diaria</div>
+                <div class="card-body">
+                     <canvas id="activityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime startDate = DateTime.Today.AddDays(-30);
+    private DateTime endDate = DateTime.Today;
+    
+    // Stats
+    private int totalVotes;
+    private int activeSurveys;
+    private int openInquietudes;
+
+    // Filter Config
+    private bool isMasterAdmin = false;
+    private int? currentAlcaldiaId;
+    private int? selectedAlcaldiaId; // For filter
+    private List<Alcaldia> alcaldias = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+
+        if (user != null)
+        {
+            currentAlcaldiaId = user.AlcaldiaId;
+            if (currentAlcaldiaId == null)
+            {
+                isMasterAdmin = true;
+                using var context = DbFactory.CreateDbContext();
+                alcaldias = await context.Alcaldias.OrderBy(a => a.Nombre).ToListAsync();
+            }
+            else
+            {
+                selectedAlcaldiaId = currentAlcaldiaId; // Lock filter
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadCharts();
+        }
+    }
+
+    private async Task OnAlcaldiaChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id))
+        {
+            selectedAlcaldiaId = id;
+        }
+        else
+        {
+            selectedAlcaldiaId = null;
+        }
+        await LoadCharts();
+    }
+
+    private async Task LoadCharts()
+    {
+        // 1. Load KPIs
+        totalVotes = await DashboardService.GetTotalVotos(selectedAlcaldiaId, startDate, endDate);
+        activeSurveys = await DashboardService.GetTotalEncuestasActivas(selectedAlcaldiaId);
+        openInquietudes = await DashboardService.GetOpenInquietudes(selectedAlcaldiaId);
+        StateHasChanged();
+
+        // 2. Load Chart Data
+        var votesData = await DashboardService.GetVotosPorEncuesta(selectedAlcaldiaId);
+        var labels = votesData.Keys.ToArray();
+        var data = votesData.Values.ToArray();
+
+        var activityData = await DashboardService.GetActivityOverTime(selectedAlcaldiaId, startDate, endDate);
+        var timeLabels = activityData.Select(d => d.Date.ToString("dd/MM")).ToArray();
+        var timeValues = activityData.Select(d => d.Value).ToArray();
+
+        // 3. Render JS Charts
+        await JS.InvokeVoidAsync("renderDashboardCharts", labels, data, timeLabels, timeValues);
+    }
+}

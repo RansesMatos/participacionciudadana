@@ -1,0 +1,110 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">ParticipacionDigital.Web</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Inicio
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="encuestas">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Encuestas
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="inquietudes">
+                <span class="oi oi-chat" aria-hidden="true"></span> Foro Ciudadano
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="actividades">
+                <span class="oi oi-calendar" aria-hidden="true"></span> Actividades
+            </NavLink>
+        </div>
+        <AuthorizeView Roles="Administrador,Moderador,Asistente">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/dashboard">
+                        <span class="oi oi-bar-chart" aria-hidden="true"></span> Dashboard
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/crear-encuesta">
+                        <span class="oi oi-plus" aria-hidden="true"></span> Crear Encuesta
+                    </NavLink>
+                </div>
+                 <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/crear-actividad">
+                        <span class="oi oi-calendar" aria-hidden="true"></span> Crear Actividad
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Administrador,Moderador">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/encuestas-pendientes">
+                        <span class="oi oi-task" aria-hidden="true"></span> Pendientes
+                        <span class="badge bg-danger ms-2" style="font-size: 0.7em;">New</span>
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/actividades-pendientes">
+                        <span class="oi oi-check" aria-hidden="true"></span> Gestionar Actividades
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/reportes">
+                        <span class="oi oi-bar-chart" aria-hidden="true"></span> Reportes
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+        
+        <AuthorizeView Roles="Ciudadano">
+             <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="mis-votos">
+                        <span class="oi oi-clock" aria-hidden="true"></span> Mis Votos
+                    </NavLink>
+                </div>
+             </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Roles="Administrador">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/usuarios">
+                        <span class="oi oi-people" aria-hidden="true"></span> Usuarios
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/encuestas">
+                        <span class="oi oi-list-rich" aria-hidden="true"></span> Gestión Encuestas
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

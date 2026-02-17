@@ -1,0 +1,360 @@
+@page "/admin/encuestas"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Infrastructure.Data
+@using ParticipacionDigital.Web.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject UserManager<Usuario> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject SecurityService SecurityService
+
+<PageTitle>Gestión de Encuestas</PageTitle>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Gestión de Encuestas</h2>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Título</th>
+                            <th>Estado</th>
+                            <th>Votos</th>
+                            <th>Cierre</th>
+                            <th>Alcaldía</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var encuesta in encuestas)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">@encuesta.Titulo</div>
+                                    <small class="text-muted">ID: @encuesta.Id</small>
+                                </td>
+                                <td>
+                                    @if (!encuesta.Activa)
+                                    {
+                                        <span class="badge bg-danger">Desactivada</span>
+                                    }
+                                    else if (encuesta.FechaFin < DateTime.UtcNow)
+                                    {
+                                        <span class="badge bg-secondary">Cerrada</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">Activa</span>
+                                    }
+                                </td>
+                                <td>@encuesta.Votos.Count</td>
+                                <td>@encuesta.FechaFin.ToShortDateString()</td>
+                                <td>
+                                    @if (encuesta.Alcaldia != null)
+                                    {
+                                        <span class="badge bg-info text-dark">@encuesta.Alcaldia.Nombre</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Global</span>
+                                    }
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => ShowEditModal(encuesta)">
+                                        <i class="bi bi-pencil"></i> Editar
+                                    </button>
+                                    @if (encuesta.Activa)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => ShowDisableModal(encuesta)">
+                                            <i class="bi bi-slash-circle"></i> Bajar
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Edit Modal *@
+@if (showEditModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Encuesta</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="editModel" OnValidSubmit="UpdateEncuesta">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <InputText class="form-control" @bind-Value="editModel.Titulo" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Descripción</label>
+                            <InputTextArea class="form-control" @bind-Value="editModel.Descripcion" />
+                        </div>
+
+                         <div class="mb-3">
+                            <label class="form-label">Fecha Fin (Cierre)</label>
+                            <InputDate class="form-control" @bind-Value="editModel.FechaFin" />
+                        </div>
+
+                        @if (hasVotes)
+                        {
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i> Esta encuesta ya tiene votos. No se pueden editar las opciones.
+                            </div>
+                        }
+                        else 
+                        {
+                             <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> Aún sin votos. Podría editar opciones (Implementación futura).
+                            </div>
+                        }
+
+                        <button type="submit" class="btn btn-primary w-100">Guardar Cambios</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Disable Modal *@
+@if (showDisableModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bajar Encuesta</h5>
+                    <button type="button" class="btn-close" @onclick="CloseDisableModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Está seguro que desea desactivar la encuesta <strong>@selectedEncuesta?.Titulo</strong>?</p>
+                    <p class="text-danger">Esta acción registrará un evento de auditoría.</p>
+                    
+                    <button class="btn btn-danger w-100" @onclick="DisableEncuesta">Confirmar Desactivación</button>
+                    <button class="btn btn-secondary w-100 mt-2" @onclick="CloseDisableModal">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Encuesta> encuestas = new();
+    private bool showEditModal = false;
+    private bool showDisableModal = false;
+    private string? errorMessage;
+    private string? successMessage;
+    
+    private EditEncuestaModel editModel = new();
+    private Encuesta? selectedEncuesta;
+    private bool hasVotes = false;
+    
+    // User Context
+    private Usuario? currentUser;
+    private bool isMasterAdmin = false;
+    private int? currentUserAlcaldiaId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUser = await UserManager.GetUserAsync(authState.User);
+        
+        if (currentUser != null)
+        {
+            var roles = await UserManager.GetRolesAsync(currentUser);
+            if (roles.Contains("Administrador"))
+            {
+                currentUserAlcaldiaId = currentUser.AlcaldiaId;
+                if (currentUserAlcaldiaId == null) isMasterAdmin = true;
+                
+                await LoadData();
+            }
+            else
+            {
+               // Redirect or show error if not authorized (should be handled by NavMenu/AuthorizeView)
+            }
+        }
+    }
+
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+        IQueryable<Encuesta> query = context.Encuestas
+            .Include(e => e.Alcaldia)
+            .Include(e => e.Votos)
+            .OrderByDescending(e => e.FechaCreacion);
+
+        if (!isMasterAdmin && currentUserAlcaldiaId.HasValue)
+        {
+            query = query.Where(e => e.AlcaldiaId == currentUserAlcaldiaId);
+        }
+
+        encuestas = await query.ToListAsync();
+    }
+
+    private void ShowEditModal(Encuesta encuesta)
+    {
+        if (encuesta.FechaFin < DateTime.UtcNow && !encuesta.Activa) 
+        {
+             errorMessage = "No se puede editar una encuesta cerrada o desactivada.";
+             return;
+        }
+
+        selectedEncuesta = encuesta;
+        hasVotes = encuesta.Votos.Any();
+        
+        editModel = new EditEncuestaModel
+        {
+            Id = encuesta.Id,
+            Titulo = encuesta.Titulo,
+            Descripcion = encuesta.Descripcion,
+            FechaFin = encuesta.FechaFin
+        };
+        
+        showEditModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private void ShowDisableModal(Encuesta encuesta)
+    {
+        selectedEncuesta = encuesta;
+        showDisableModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private void CloseEditModal() => showEditModal = false;
+    private void CloseDisableModal() => showDisableModal = false;
+
+    private async Task UpdateEncuesta()
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var encuesta = await context.Encuestas.FindAsync(editModel.Id);
+
+            if (encuesta == null)
+            {
+                errorMessage = "Encuesta no encontrada.";
+                return;
+            }
+
+            // Capture old values for audit
+            var oldTitle = encuesta.Titulo;
+            var oldDesc = encuesta.Descripcion;
+            var oldDate = encuesta.FechaFin;
+
+            // Update
+            encuesta.Titulo = editModel.Titulo;
+            encuesta.Descripcion = editModel.Descripcion;
+            encuesta.FechaFin = editModel.FechaFin;
+
+            // Audit
+            var ip = SecurityService.GetClientIpAddress();
+            var encryptedIp = SecurityService.Encrypt(ip);
+            var userAgent = ""; // Can inject HttpContextAccessor if needed, or pass from layout
+            
+            context.AuditLogs.Add(new AuditLog
+            {
+                UsuarioId = currentUser?.Id.ToString(),
+                Action = "Encuesta Edited",
+                Details = $"ID: {encuesta.Id}. Changed Title: '{oldTitle}'->'{editModel.Titulo}'",
+                IpAddress = encryptedIp,
+                UserAgent = "Web", // Simplification
+                Timestamp = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+            
+            successMessage = "Encuesta actualizada correctamente.";
+            showEditModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error al actualizar: " + ex.Message;
+        }
+    }
+
+    private async Task DisableEncuesta()
+    {
+        if (selectedEncuesta == null) return;
+
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var encuesta = await context.Encuestas.FindAsync(selectedEncuesta.Id);
+            
+            if (encuesta == null) return;
+
+            encuesta.Activa = false;
+
+            // Audit
+            var ip = SecurityService.GetClientIpAddress();
+            var encryptedIp = SecurityService.Encrypt(ip);
+
+            context.AuditLogs.Add(new AuditLog
+            {
+                UsuarioId = currentUser?.Id.ToString(),
+                Action = "Encuesta Disabled",
+                Details = $"ID: {encuesta.Id}. Survey was manually disabled.",
+                IpAddress = encryptedIp,
+                UserAgent = "Web",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+
+            successMessage = "Encuesta desactivada correctamente.";
+            showDisableModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error al desactivar: " + ex.Message;
+        }
+    }
+
+    public class EditEncuestaModel
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; } = "";
+        public string Descripcion { get; set; } = "";
+        public DateTime FechaFin { get; set; }
+    }
+}

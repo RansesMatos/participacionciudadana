@@ -1,0 +1,74 @@
+@page
+@model RegisterModel
+@{
+    ViewData["Title"] = "Registro de Ciudadano";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-5">
+        <div class="glass-card p-4">
+            <h2 class="text-center mb-4 text-gradient">@ViewData["Title"]</h2>
+            <form id="registerForm" asp-route-returnUrl="@Model.ReturnUrl" method="post">
+                <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Nombre" class="form-control" autocomplete="name" aria-required="true" placeholder="Juan Perez" />
+                    <label asp-for="Input.Nombre">Nombre Completo</label>
+                    <span asp-validation-for="Input.Nombre" class="text-danger"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Cedula" class="form-control" autocomplete="off" aria-required="true" placeholder="001-0000000-0" />
+                    <label asp-for="Input.Cedula">Cédula de Identidad</label>
+                    <span asp-validation-for="Input.Cedula" class="text-danger"></span>
+                    <small class="text-muted ms-1">Formato: 001-0000000-0</small>
+                </div>
+
+                <div class="form-floating mb-3">
+                     <select asp-for="Input.AlcaldiaId" class="form-select" aria-required="true">
+                        <option value="">-- Seleccione su Alcaldía --</option>
+                        @if (Model.Alcaldias != null)
+                        {
+                            foreach (var alcaldia in Model.Alcaldias)
+                            {
+                                <option value="@alcaldia.Id">@alcaldia.Nombre</option>
+                            }
+                        }
+                    </select>
+                    <label asp-for="Input.AlcaldiaId">Alcaldía / Municipio</label>
+                    <span asp-validation-for="Input.AlcaldiaId" class="text-danger"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                    <label asp-for="Input.Email">Correo Electrónico</label>
+                    <span asp-validation-for="Input.Email" class="text-danger"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                    <label asp-for="Input.Password">Contraseña</label>
+                    <span asp-validation-for="Input.Password" class="text-danger"></span>
+                </div>
+
+                <div class="form-floating mb-3">
+                    <input asp-for="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                    <label asp-for="Input.ConfirmPassword">Confirmar Contraseña</label>
+                    <span asp-validation-for="Input.ConfirmPassword" class="text-danger"></span>
+                </div>
+
+                <button id="registerSubmit" type="submit" class="w-100 btn btn-lg btn-primary mb-3">Registrarse</button>
+                
+                <div class="text-center">
+                    <p>
+                        <a asp-page="./Login" asp-route-returnUrl="@Model.ReturnUrl" class="text-decoration-none">¿Ya tienes una cuenta? Iniciar Sesión</a>
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

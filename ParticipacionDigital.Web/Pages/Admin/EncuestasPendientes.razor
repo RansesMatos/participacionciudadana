@@ -1,0 +1,90 @@
+@page "/admin/encuestas-pendientes"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Core.Enums
+@using ParticipacionDigital.Infrastructure.Data
+@inject AppDbContext DbContext
+@inject NavigationManager Navigation
+@attribute [Authorize(Roles = "Administrador,Moderador")]
+
+<PageTitle>Encuestas Pendientes</PageTitle>
+
+<div class="container">
+    <h2 class="mb-4">Encuestas Pendientes de Aprobación</h2>
+
+    @if (encuestasPendientes == null)
+    {
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    }
+    else if (!encuestasPendientes.Any())
+    {
+        <div class="alert alert-success">
+            <i class="oi oi-check"></i> No hay encuestas pendientes de aprobación.
+        </div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 g-4">
+            @foreach (var encuesta in encuestasPendientes)
+            {
+                <div class="col">
+                    <div class="card h-100 border-warning">
+                        <div class="card-header bg-warning text-dark d-flex justify-content-between">
+                            <strong>@encuesta.Titulo</strong>
+                            <small>Creado por ID: @encuesta.CreadorId</small>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-text">@encuesta.Descripcion</p>
+                            <p class="card-text"><small class="text-muted">Inicio: @encuesta.FechaInicio.ToShortDateString() - Fin: @encuesta.FechaFin.ToShortDateString()</small></p>
+                            <p class="card-text">
+                                <span class="badge bg-secondary">@(encuesta.Alcaldia?.Nombre ?? "Global")</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 d-flex justify-content-end gap-2">
+                             <button class="btn btn-outline-danger btn-sm" @onclick="() => RechazarEncuesta(encuesta)">Rechazar</button>
+                             <button class="btn btn-success btn-sm" @onclick="() => AprobarEncuesta(encuesta)">Aprobar y Publicar</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Encuesta>? encuestasPendientes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPendientes();
+    }
+
+    private async Task LoadPendientes()
+    {
+        encuestasPendientes = await DbContext.Encuestas
+            .Include(e => e.Alcaldia)
+            .Where(e => !e.Activa && e.FechaFin > DateTime.UtcNow) // Only inactive and future surveys
+            .OrderBy(e => e.FechaInicio)
+            .ToListAsync();
+    }
+
+    private async Task AprobarEncuesta(Encuesta encuesta)
+    {
+        encuesta.Activa = true;
+        await DbContext.SaveChangesAsync();
+        await LoadPendientes();
+    }
+
+    private async Task RechazarEncuesta(Encuesta encuesta)
+    {
+        // For now, simpler rejection just deletes it or keeps it inactive? 
+        // Let's delete it for simplicity in this iteration, or we could have a 'Rechazada' state if we added a Status enum.
+        // Given current bool Activa, let's just delete it to keep it clean.
+        DbContext.Encuestas.Remove(encuesta);
+        await DbContext.SaveChangesAsync();
+        await LoadPendientes();
+    }
+}

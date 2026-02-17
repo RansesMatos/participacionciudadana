@@ -1,0 +1,303 @@
+@page "/inquietudes/{Id:int}"
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Core.Enums
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@using ParticipacionDigital.Core.Services
+@inject AppDbContext DbContext
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ContentModerationService ModerationService
+@attribute [Authorize]
+
+@if (inquietud == null)
+{
+    @if (notFound)
+    {
+        <div class="alert alert-warning">La inquietud no existe o fue eliminada.</div>
+    }
+    else
+    {
+        <div class="text-center p-5"><div class="spinner-border text-primary"></div></div>
+    }
+}
+else
+{
+    <PageTitle>@inquietud.Titulo</PageTitle>
+
+    <div class="mb-3">
+        <a href="/inquietudes" class="btn btn-link text-decoration-none">← Volver al Foro</a>
+    </div>
+
+    <!-- Main Inquietud Card -->
+    <div class="card glass-card mb-4 border-0 shadow-sm @(!inquietud.Activa ? "opacity-75 border-warning border border-2" : "")">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h2 class="fw-bold mb-3 text-primary">
+                        @if (!inquietud.Activa) { <span class="badge bg-warning text-dark me-2">🚫 Oculto</span> }
+                        @inquietud.Titulo
+                    </h2>
+                </div>
+                @if (esModerador)
+                {
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            ⚙️ Moderar
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><button class="dropdown-item" @onclick="ToggleInquietudVisibility">@(inquietud.Activa ? "👁️ Ocultar Tema" : "✅ Mostrar Tema")</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                             <li><h6 class="dropdown-header">Usuario: @(inquietud.Autor?.Nombre)</h6></li>
+                            <li><button class="dropdown-item text-danger" @onclick="() => AmonestarUsuario(inquietud.AutorId)">⚠️ Amonestar (+1)</button></li>
+                        </ul>
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex align-items-center mb-3 text-muted">
+                <span class="me-3">
+                    👤 @(inquietud.Autor?.Nombre ?? "Usuario")
+                    @if(esModerador && inquietud.Autor != null && inquietud.Autor.Admoniciones > 0)
+                    {
+                        <span class="badge bg-danger ms-1" title="Amonestaciones">⚠️ @inquietud.Autor.Admoniciones</span>
+                    }
+                </span>
+                <span>📅 @inquietud.FechaCreacion.ToString("f")</span>
+                @if (esModerador && inquietud.Reportado)
+                {
+                    <span class="badge bg-danger ms-2">🚩 REPORTADO</span>
+                }
+                @if (esAsistente && !inquietud.Reportado)
+                {
+                    <button class="btn btn-sm btn-outline-danger ms-3" @onclick="ReportarInquietud">🚩 Reportar</button>
+                }
+            </div>
+            <p class="fs-5" style="white-space: pre-wrap;">@inquietud.Descripcion</p>
+        </div>
+    </div>
+
+    <h4 class="mb-3 fw-bold">Respuestas (@(inquietud.Respuestas?.Count ?? 0))</h4>
+    
+    @if (errorMessage != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Reply Form -->
+    <AuthorizeView Context="auth">
+        <Authorized>
+            <div class="card glass-card mb-4 border-0">
+                <div class="card-body">
+                    <EditForm Model="@nuevaRespuesta" OnValidSubmit="HandleSubmitRespuesta">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <InputTextArea class="form-control" @bind-Value="nuevaRespuesta.Texto" placeholder="Escribe tu respuesta..." rows="3" />
+                            <ValidationMessage For="@(() => nuevaRespuesta.Texto)" />
+                        </div>
+                        <button type="submit" class="btn btn-primary gradient-btn">Responder</button>
+                    </EditForm>
+                </div>
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <div class="alert alert-info glass-card border-0">
+                <a href="Identity/Account/Login?returnUrl=/inquietudes/@Id" class="fw-bold">Inicia sesión</a> para responder a este tema.
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+
+    <!-- Replies List -->
+    <div class="d-flex flex-column gap-3">
+        @foreach (var respuesta in inquietud.Respuestas?.OrderBy(r => r.FechaCreacion) ?? Enumerable.Empty<RespuestaInquietud>())
+        {
+            if (!respuesta.Activa && !esModerador) continue;
+
+             <div class="card shadow-sm border-0 @(respuesta.EsAutoridad ? "border-start border-4 border-warning bg-light-warning" : "glass-card") @(!respuesta.Activa ? "opacity-75 border border-warning" : "")">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <div class="d-flex align-items-center">
+                            <strong class="@(respuesta.EsAutoridad ? "text-dark" : "text-primary")">
+                                @if (!respuesta.Activa) { <span class="badge bg-warning text-dark me-2">🚫 Oculto</span> }
+                                @if(respuesta.EsAutoridad) { <span class="badge bg-warning text-dark me-2">🏛️ Autoridad</span> }
+                                @(respuesta.Autor?.Nombre ?? "Usuario")
+                            </strong>
+                             @if(esModerador && respuesta.Autor != null && respuesta.Autor.Admoniciones > 0)
+                            {
+                                <span class="badge bg-danger ms-2" title="Amonestaciones" style="font-size: 0.6em">⚠️ @respuesta.Autor.Admoniciones</span>
+                            }
+                        </div>
+                        
+                        <div class="d-flex align-items-center">
+                             <small class="text-muted me-2">
+                                @respuesta.FechaCreacion.ToString("g")
+                                @if (esModerador && respuesta.Reportado)
+                                {
+                                    <span class="badge bg-danger ms-2">🚩 REPORTADO</span>
+                                }
+                            </small>
+                            
+                            @if (esAsistente && !respuesta.Reportado)
+                            {
+                                <button class="btn btn-sm btn-link text-danger p-0 ms-2" @onclick="() => ReportarRespuesta(respuesta)">🚩</button>
+                            }
+
+                            @if (esModerador)
+                            {
+                                <div class="dropdown ms-2">
+                                    <button class="btn btn-sm btn-light border dropdown-toggle py-0 px-1" type="button" data-bs-toggle="dropdown">
+                                        ⚙️
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><button class="dropdown-item" @onclick="() => ToggleRespuestaVisibility(respuesta)" >@(respuesta.Activa ? "👁️ Ocultar" : "✅ Mostrar")</button></li>
+                                        <li><button class="dropdown-item text-danger" @onclick="() => AmonestarUsuario(respuesta.AutorId)">⚠️ Amonestar (+1)</button></li>
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <p class="mb-0" style="white-space: pre-wrap;">@respuesta.Texto</p>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Inquietud? inquietud;
+    private RespuestaInquietud nuevaRespuesta = new();
+    private bool notFound = false;
+    private string? errorMessage;
+    private int currentUserId;
+    private bool esAsistente;
+    private bool esModerador;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var idClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+                if (idClaim != null && int.TryParse(idClaim.Value, out int uid))
+                {
+                    currentUserId = uid;
+                    var dbUser = await DbContext.Users.FindAsync(currentUserId);
+                    if (dbUser != null)
+                    {
+                        esAsistente = dbUser.Rol == RolUsuario.Asistente;
+                        esModerador = dbUser.Rol == RolUsuario.Administrador || dbUser.Rol == RolUsuario.Moderador;
+                    }
+                }
+            }
+
+            await CargarInquietud();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            notFound = true;
+        }
+    }
+
+    private async Task CargarInquietud()
+    {
+        inquietud = await DbContext.Inquietudes
+            .Include(i => i.Autor)
+            .Include(i => i.Respuestas)
+            .ThenInclude(r => r.Autor)
+            .FirstOrDefaultAsync(i => i.Id == Id);
+
+        if (inquietud == null) notFound = true;
+    }
+
+    private async Task HandleSubmitRespuesta()
+    {
+        if (string.IsNullOrWhiteSpace(nuevaRespuesta.Texto)) return;
+
+        // Moderation Content Check
+        List<string> badWords; 
+        if (ModerationService.ContainsBadWords(nuevaRespuesta.Texto, out badWords))
+        {
+             errorMessage = $"Tu comentario contiene palabras no permitidas: {string.Join(", ", badWords)}. Mantengamos el respeto.";
+             return;
+        }
+        errorMessage = null;
+
+        try
+        {
+            nuevaRespuesta.InquietudId = Id;
+            nuevaRespuesta.AutorId = currentUserId;
+            nuevaRespuesta.FechaCreacion = DateTime.UtcNow;
+            nuevaRespuesta.Activa = true; // Default visible
+            
+            // Check authority status from DB
+            var dbUser = await DbContext.Users.FindAsync(currentUserId);
+            if (dbUser != null)
+            {
+                nuevaRespuesta.EsAutoridad = dbUser.Rol == RolUsuario.Administrador || dbUser.Rol == RolUsuario.Moderador || dbUser.Rol == RolUsuario.Asistente;
+            }
+
+            DbContext.RespuestasInquietudes.Add(nuevaRespuesta);
+            await DbContext.SaveChangesAsync();
+
+            nuevaRespuesta = new RespuestaInquietud(); // Reset
+            await CargarInquietud();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            errorMessage = "Ocurrió un error al enviar la respuesta.";
+        }
+    }
+
+    // --- Assistant Actions ---
+    private async Task ReportarInquietud()
+    {
+        if (inquietud == null) return;
+        inquietud.Reportado = true;
+        await DbContext.SaveChangesAsync();
+    }
+
+    private async Task ReportarRespuesta(RespuestaInquietud respuesta)
+    {
+        respuesta.Reportado = true;
+        await DbContext.SaveChangesAsync();
+    }
+
+    // --- Moderator Actions ---
+    private async Task ToggleInquietudVisibility()
+    {
+        if (inquietud == null || !esModerador) return;
+        inquietud.Activa = !inquietud.Activa;
+        await DbContext.SaveChangesAsync();
+    }
+
+    private async Task ToggleRespuestaVisibility(RespuestaInquietud respuesta)
+    {
+        if (!esModerador) return;
+        respuesta.Activa = !respuesta.Activa;
+        await DbContext.SaveChangesAsync();
+    }
+
+    private async Task AmonestarUsuario(int usuarioId)
+    {
+        if (!esModerador) return;
+        var usuario = await DbContext.Users.FindAsync(usuarioId);
+        if (usuario != null)
+        {
+            usuario.Admoniciones++;
+            await DbContext.SaveChangesAsync();
+            await CargarInquietud(); // Refresh to show new admonition count
+            errorMessage = $"Usuario {usuario.Nombre} ha sido amonestado. Total: {usuario.Admoniciones}";
+        }
+    }
+}

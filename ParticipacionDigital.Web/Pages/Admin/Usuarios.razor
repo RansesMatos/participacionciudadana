@@ -1,0 +1,743 @@
+@page "/admin/usuarios"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using ParticipacionDigital.Core.Entities
+@using ParticipacionDigital.Core.Enums
+@using ParticipacionDigital.Infrastructure.Data
+@using Microsoft.Extensions.DependencyInjection
+@using System.ComponentModel.DataAnnotations
+
+@inject IServiceScopeFactory ScopeFactory
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@* Removed direct UserManager/DbContext injections to avoid concurrency issues *@
+
+<PageTitle>Gestión de Usuarios</PageTitle>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Gestión de Usuarios</h2>
+        @if (canCreateUsers)
+        {
+            <button class="btn btn-primary" @onclick="ShowCreateModal">
+                <i class="bi bi-person-plus"></i> Nuevo Usuario
+            </button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+    
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == 0 ? "active" : "")" @onclick="() => activeTab = 0">
+                <i class="bi bi-shield-lock"></i> Administrativos
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == 1 ? "active" : "")" @onclick="() => activeTab = 1">
+                <i class="bi bi-people"></i> Ciudadanos
+            </button>
+        </li>
+    </ul>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Alcaldía</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in GetFilteredUsers())
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-light rounded-circle p-2 me-2">
+                                            <i class="bi bi-person text-secondary"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">@user.Nombre</div>
+                                            <small class="text-muted">@user.UserName</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>@user.Email</td>
+                                <td>
+                                    @if (userRoles.ContainsKey(user.Id))
+                                    {
+                                        @foreach (var role in userRoles[user.Id])
+                                        {
+                                            <span class="badge bg-primary me-1">@role</span>
+                                        }
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.Alcaldia != null)
+                                    {
+                                        <span class="badge bg-info text-dark">@user.Alcaldia.Nombre</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Global</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (canCreateUsers)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowEditModal(user)">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </button>
+                                        @if (activeTab == 1) // Citizens
+                                        {
+                                            @if (user.LockoutEnd > DateTimeOffset.UtcNow)
+                                            {
+                                                <button class="btn btn-sm btn-outline-success ms-1" @onclick="() => ShowLiftSuspensionModal(user)">
+                                                    <i class="bi bi-unlock"></i> Levantar Castigo
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => ShowAdmonishModal(user)">
+                                                    <i class="bi bi-exclamation-triangle"></i> Amonestar
+                                                </button>
+                                            }
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Create Modal *@
+@if (showCreateModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nuevo Usuario</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="newUserModel" OnValidSubmit="CreateUser">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nombre Completo</label>
+                            <InputText class="form-control" @bind-Value="newUserModel.Nombre" />
+                        </div>
+                         <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <InputText class="form-control" @bind-Value="newUserModel.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Contraseña</label>
+                            <InputText type="password" class="form-control" @bind-Value="newUserModel.Password" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Rol</label>
+                            <InputSelect class="form-select" @bind-Value="newUserModel.Role">
+                                @if (isMasterAdmin)
+                                {
+                                    <option value="Administrador">Administrador (Local)</option>
+                                    <option value="Moderador">Moderador</option>
+                                    <option value="Asistente">Asistente</option>
+                                }
+                                else
+                                {
+                                    <option value="Moderador">Moderador</option>
+                                    <option value="Asistente">Asistente</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Alcaldía</label>
+                            <select class="form-select" @bind="newUserModel.AlcaldiaId" disabled="@(!isMasterAdmin)">
+                                @if (isMasterAdmin)
+                                {
+                                    <option value="">Seleccione Alcaldía...</option>
+                                    @foreach (var a in alcaldias)
+                                    {
+                                        <option value="@a.Id">@a.Nombre</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="@currentUserAlcaldiaId" selected>@currentAlcaldiaName</option>
+                                }
+                            </select>
+                           
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Crear Usuario</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Edit Modal *@
+@if (showEditModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Editar Usuario</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                     <EditForm Model="editUserModel" OnValidSubmit="UpdateUser">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Nombre Completo</label>
+                            <InputText class="form-control" @bind-Value="editUserModel.Nombre" />
+                        </div>
+                         <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="text" class="form-control" value="@editUserModel.Email" disabled />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Rol</label>
+                            <InputSelect class="form-select" @bind-Value="editUserModel.Role">
+                                @if (isMasterAdmin)
+                                {
+                                    <option value="Administrador">Administrador (Local)</option>
+                                    <option value="Moderador">Moderador</option>
+                                    <option value="Asistente">Asistente</option>
+                                    <option value="Ciudadano">Ciudadano</option>
+                                }
+                                else
+                                {
+                                    <option value="Moderador">Moderador</option>
+                                    <option value="Asistente">Asistente</option>
+                                    <option value="Ciudadano">Ciudadano</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Alcaldía</label>
+                            <select class="form-select" @bind="editUserModel.AlcaldiaId" disabled="@(!isMasterAdmin)">
+                                @if (isMasterAdmin)
+                                {
+                                    <option value="">Seleccione Alcaldía...</option>
+                                    @foreach (var a in alcaldias)
+                                    {
+                                        <option value="@a.Id">@a.Nombre</option>
+                                    }
+                                }
+                                else
+                                {
+                                    <option value="@currentUserAlcaldiaId" selected>@currentAlcaldiaName</option>
+                                }
+                            </select>
+                        </div>
+                        
+                        <hr/>
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Resetear Contraseña (Opcional)</label>
+                            <InputText type="password" class="form-control" @bind-Value="editUserModel.NewPassword" placeholder="Dejar en blanco para no cambiar" />
+                        </div>
+
+                        <button type="submit" class="btn btn-warning w-100">Guardar Cambios</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Admonish Modal *@
+@if (showAdmonishModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Amonestar Ciudadano</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseAdmonishModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>El usuario será suspendido por <strong>5 días</strong>.</p>
+                    <EditForm Model="admonishModel" OnValidSubmit="AdmonishUser">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label">Razón de la amonestación</label>
+                            <InputTextArea class="form-control" @bind-Value="admonishModel.Razon" rows="4" placeholder="Explique el motivo..." />
+                            <ValidationMessage For="@(() => admonishModel.Razon)" />
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">Confirmar Suspensión</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* Lift Suspension Modal *@
+@if (showLiftSuspensionModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Levantar Suspensión</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseLiftSuspensionModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>La cuenta del usuario será reactivada inmediatamente.</p>
+                    <EditForm Model="liftSuspensionModel" OnValidSubmit="LiftSuspension">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label">Razón del levantamiento</label>
+                            <InputTextArea class="form-control" @bind-Value="liftSuspensionModel.Razon" rows="4" placeholder="Explique por qué se levanta el castigo..." />
+                            <ValidationMessage For="@(() => liftSuspensionModel.Razon)" />
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Confirmar Levantamiento</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Usuario> users = new();
+    private Dictionary<int, IList<string>> userRoles = new();
+    private List<Alcaldia> alcaldias = new();
+    
+    private bool isMasterAdmin = false;
+    private int? currentUserAlcaldiaId;
+    private int currentUserId; 
+    private string currentAlcaldiaName = "";
+    private bool canCreateUsers = false;
+    private int activeTab = 0; // 0: Admin, 1: Citizen
+
+    private bool showCreateModal = false;
+    private bool showEditModal = false;
+    private bool showAdmonishModal = false;
+    private bool showLiftSuspensionModal = false;
+    private string? errorMessage;
+    private string? successMessage;
+    
+    private NewUserModel newUserModel = new();
+    private EditUserModel editUserModel = new();
+    private AdmonishModel admonishModel = new();
+    private LiftSuspensionModel liftSuspensionModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        
+        using (var scope = ScopeFactory.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+            var user = await userManager.GetUserAsync(authState.User);
+        
+            if (user != null)
+            {
+                currentUserId = user.Id;
+                var roles = await userManager.GetRolesAsync(user);
+                if (roles.Contains("Administrador"))
+                {
+                    canCreateUsers = true;
+                    currentUserAlcaldiaId = user.AlcaldiaId;
+                    
+                    if (currentUserAlcaldiaId == null)
+                    {
+                        isMasterAdmin = true;
+                    }
+                    else
+                    {
+                        using var context = DbFactory.CreateDbContext();
+                        var alc = await context.Alcaldias.FindAsync(currentUserAlcaldiaId);
+                        currentAlcaldiaName = alc?.Nombre ?? "Unknown";
+                    }
+                }
+            }
+        }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+        using var context = DbFactory.CreateDbContext();
+
+        IQueryable<Usuario> query = userManager.Users.Include(u => u.Alcaldia);
+
+        if (!isMasterAdmin && currentUserAlcaldiaId.HasValue)
+        {
+            // Local Admin only sees users in their Alcaldia
+            query = query.Where(u => u.AlcaldiaId == currentUserAlcaldiaId);
+        }
+
+        users = await query.ToListAsync();
+        alcaldias = await context.Alcaldias.OrderBy(a => a.Nombre).ToListAsync();
+
+        userRoles.Clear();
+        foreach (var u in users)
+        {
+            var roles = await userManager.GetRolesAsync(u);
+            userRoles[u.Id] = roles;
+        }
+    }
+    
+    private IEnumerable<Usuario> GetFilteredUsers()
+    {
+        if (activeTab == 0) // Administrative
+        {
+            return users.Where(u => userRoles.ContainsKey(u.Id) && 
+                                  !userRoles[u.Id].Contains("Ciudadano"));
+        }
+        else // Citizens
+        {
+             return users.Where(u => userRoles.ContainsKey(u.Id) && 
+                                  userRoles[u.Id].Contains("Ciudadano"));
+        }
+    }
+
+    private void ShowCreateModal()
+    {
+        newUserModel = new NewUserModel();
+        if (!isMasterAdmin)
+        {
+            newUserModel.AlcaldiaId = currentUserAlcaldiaId; // Pre-set for local admin
+        }
+        showCreateModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+    
+    private async Task ShowEditModal(Usuario user)
+    {
+        var role = "Ciudadano";
+        if (userRoles.ContainsKey(user.Id))
+        {
+             role = userRoles[user.Id].FirstOrDefault() ?? "Ciudadano";
+        }
+
+        editUserModel = new EditUserModel
+        {
+            UserId = user.Id,
+            Nombre = user.Nombre,
+            Email = user.Email!,
+            AlcaldiaId = user.AlcaldiaId,
+            Role = role
+        };
+        
+        showEditModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private void ShowAdmonishModal(Usuario user)
+    {
+        admonishModel = new AdmonishModel
+        {
+            UserId = user.Id,
+            UserName = user.Nombre
+        };
+        showAdmonishModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+    
+    private void ShowLiftSuspensionModal(Usuario user)
+    {
+        liftSuspensionModel = new LiftSuspensionModel
+        {
+            UserId = user.Id,
+            UserName = user.Nombre
+        };
+        showLiftSuspensionModal = true;
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private void CloseCreateModal() => showCreateModal = false;
+    private void CloseEditModal() => showEditModal = false;
+    private void CloseAdmonishModal() => showAdmonishModal = false;
+    private void CloseLiftSuspensionModal() => showLiftSuspensionModal = false;
+
+    private async Task CreateUser()
+    {
+        try 
+        {
+            if (!isMasterAdmin && newUserModel.AlcaldiaId != currentUserAlcaldiaId)
+            {
+                errorMessage = "No tiene permiso para asignar usuarios a otra alcaldía.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(newUserModel.Password))
+            {
+                 errorMessage = "La contraseña es requerida.";
+                 return;
+            }
+
+            var user = new Usuario
+            {
+                UserName = newUserModel.Email,
+                Email = newUserModel.Email,
+                Nombre = newUserModel.Nombre,
+                AlcaldiaId = newUserModel.AlcaldiaId,
+                EmailConfirmed = true,
+                FechaRegistro = DateTime.UtcNow,
+                MustChangePassword = true // Enforce password change
+            };
+
+            using var scope = ScopeFactory.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+
+            var result = await userManager.CreateAsync(user, newUserModel.Password);
+            
+            if (result.Succeeded)
+            {
+                if (!string.IsNullOrEmpty(newUserModel.Role))
+                {
+                    await userManager.AddToRoleAsync(user, newUserModel.Role);
+                }
+
+                successMessage = $"Usuario {user.Nombre} creado exitosamente.";
+                showCreateModal = false;
+                await LoadData();
+            }
+            else
+            {
+                errorMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+    
+    private async Task UpdateUser()
+    {
+         using var scope = ScopeFactory.CreateScope();
+         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+
+         var user = await userManager.FindByIdAsync(editUserModel.UserId.ToString());
+         if (user == null) 
+         {
+             errorMessage = "Usuario no encontrado.";
+             return;
+         }
+         
+         // Validate Permissions
+         if (!isMasterAdmin)
+         {
+             if (user.AlcaldiaId != currentUserAlcaldiaId) // Maintain scope
+             {
+                 errorMessage = "No puede editar usuarios de otra alcaldía.";
+                 return;
+             }
+             if (editUserModel.AlcaldiaId != currentUserAlcaldiaId) // Prevent moving
+             {
+                  errorMessage = "No puede mover usuarios a otra alcaldía.";
+                  return;
+             }
+         }
+
+         user.Nombre = editUserModel.Nombre;
+         user.AlcaldiaId = editUserModel.AlcaldiaId;
+         
+         var updateResult = await userManager.UpdateAsync(user);
+         if (!updateResult.Succeeded)
+         {
+              errorMessage = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+              return;
+         }
+         
+         // Update Role
+         var currentRoles = await userManager.GetRolesAsync(user);
+         if (!currentRoles.Contains(editUserModel.Role))
+         {
+             await userManager.RemoveFromRolesAsync(user, currentRoles);
+             await userManager.AddToRoleAsync(user, editUserModel.Role);
+         }
+         
+             // Reset Password if provided
+         if (!string.IsNullOrWhiteSpace(editUserModel.NewPassword))
+         {
+             var token = await userManager.GeneratePasswordResetTokenAsync(user);
+             var pwdResult = await userManager.ResetPasswordAsync(user, token, editUserModel.NewPassword);
+             if (!pwdResult.Succeeded)
+             {
+                 errorMessage = "Error al resetear contraseña: " + string.Join(", ", pwdResult.Errors.Select(e => e.Description));
+                 return;
+             }
+             
+             // Enforce change on next login
+             user.MustChangePassword = true;
+             await userManager.UpdateAsync(user);
+         }
+         
+         successMessage = "Usuario actualizado correctamente.";
+         showEditModal = false;
+         await LoadData();
+    }
+
+    private async Task AdmonishUser()
+    {
+        if (string.IsNullOrWhiteSpace(admonishModel.Razon)) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+            using var context = DbFactory.CreateDbContext();
+
+            var user = await userManager.FindByIdAsync(admonishModel.UserId.ToString());
+            if (user == null)
+            {
+                errorMessage = "Usuario no encontrado.";
+                return;
+            }
+
+            // 1. Create Amonestacion Record
+            var amonestacion = new Amonestacion
+            {
+                UsuarioId = user.Id,
+                AdminId = currentUserId,
+                Fecha = DateTime.UtcNow,
+                FechaFin = DateTime.UtcNow.AddDays(5),
+                Razon = admonishModel.Razon
+            };
+            context.Amonestaciones.Add(amonestacion);
+            
+            // 2. Increment Counter
+             user.Admoniciones++; // Ensure this property exists in Usuario.cs, else standard way
+             
+            // 3. Lockout User
+            // Identity uses DateTimeOffset
+            await userManager.SetLockoutEndDateAsync(user, DateTimeOffset.UtcNow.AddDays(5));
+            // Ensure lockout is enabled if not already
+            await userManager.SetLockoutEnabledAsync(user, true);
+
+            await context.SaveChangesAsync();
+            
+            successMessage = $"Usuario {user.Nombre} ha sido suspendido por 5 días.";
+            showAdmonishModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+             errorMessage = "Error al amonestar: " + ex.Message;
+        }
+    }
+    
+    private async Task LiftSuspension()
+    {
+        if (string.IsNullOrWhiteSpace(liftSuspensionModel.Razon)) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<Usuario>>();
+            using var context = DbFactory.CreateDbContext();
+
+            var user = await userManager.FindByIdAsync(liftSuspensionModel.UserId.ToString());
+            if (user == null)
+            {
+                errorMessage = "Usuario no encontrado.";
+                return;
+            }
+
+            // 1. Find Active Amonestacion
+            var activeAdmonish = await context.Amonestaciones
+                .Where(a => a.UsuarioId == user.Id && a.FechaFin > DateTime.UtcNow && a.FechaLevantamiento == null)
+                .OrderByDescending(a => a.Fecha)
+                .FirstOrDefaultAsync();
+
+            if (activeAdmonish != null)
+            {
+                activeAdmonish.FechaLevantamiento = DateTime.UtcNow;
+                activeAdmonish.RazonLevantamiento = liftSuspensionModel.Razon;
+                activeAdmonish.AdminLevantamientoId = currentUserId;
+            }
+
+            // 2. Remove Lockout
+            await userManager.SetLockoutEndDateAsync(user, null);
+
+            await context.SaveChangesAsync();
+            
+            successMessage = $"Suspensión levantada para el usuario {user.Nombre}.";
+            showLiftSuspensionModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+             errorMessage = "Error al levantar suspensión: " + ex.Message;
+        }
+    }
+
+    public class NewUserModel
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Role { get; set; } = "Moderador";
+        public int? AlcaldiaId { get; set; }
+    }
+    
+    public class EditUserModel
+    {
+        public int UserId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = "Moderador";
+        public int? AlcaldiaId { get; set; }
+        public string? NewPassword { get; set; }
+    }
+
+    public class AdmonishModel
+    {
+        public int UserId { get; set; }
+        public string UserName { get; set; } = string.Empty;
+        [Required(ErrorMessage = "La razón es obligatoria")]
+        public string Razon { get; set; } = string.Empty;
+    }
+    
+    public class LiftSuspensionModel
+    {
+        public int UserId { get; set; }
+        public string UserName { get; set; } = string.Empty;
+        [Required(ErrorMessage = "La razón es obligatoria")]
+        public string Razon { get; set; } = string.Empty;
+    }
+}
