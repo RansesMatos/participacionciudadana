@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,16 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddSignalR();
 builder.Services.AddMemoryCache();
+
+// Configurar cabeceras reenviadas para proxies inversos (Cloudflare Tunnel / Nginx)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Limpiar las redes/proxies conocidos para confiar en los valores inyectados por Cloudflare Tunnel
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -66,6 +77,9 @@ builder.Services.AddScoped<ParticipacionDigital.Web.Services.DashboardService>()
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
+
+// Habilitar el procesamiento de cabeceras reenviadas antes de cualquier redirección o seguridad
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
